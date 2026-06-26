@@ -114,12 +114,13 @@ export async function loginWithGoogle({ email, password }, config = GOOGLE_LOGIN
   });
   const chromium = patchright.chromium || patchright.default?.chromium;
 
-  const browser = await chromium.launch({ headless: !config.headed });
-  const context = await browser.newContext();
-  const page = await context.newPage();
-  page.setDefaultTimeout(config.stepTimeoutMs);
-
+  let browser;
   try {
+    browser = await chromium.launch({ headless: !config.headed });
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    page.setDefaultTimeout(config.stepTimeoutMs);
+
     await page.goto(config.authUrl, { timeout: config.navTimeoutMs, waitUntil: "domcontentloaded" });
     await clickGoogleButton(page, config);
     await fillEmail(page, email, config);
@@ -143,8 +144,11 @@ export async function loginWithGoogle({ email, password }, config = GOOGLE_LOGIN
     if (error?.name === "TimeoutError") {
       throw new GoogleLoginError("timeout");
     }
+    if (/ENOENT|spawn|executable|browser.*not.*found/i.test(error?.message || "")) {
+      throw new GoogleLoginError("patchright_not_installed");
+    }
     throw new GoogleLoginError("unknown");
   } finally {
-    await browser.close().catch(() => {});
+    await browser?.close().catch(() => {});
   }
 }
