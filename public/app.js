@@ -74,7 +74,6 @@ const REASON_LABELS = {
 const ERROR_LABELS = {
   api_key_not_found: "ключ не найден",
   account_disabled: "аккаунт отключён",
-  login_redirect: "нужен вход (кука устарела)",
 };
 
 function reasonLabel(value) {
@@ -279,11 +278,11 @@ function windowCell(window) {
   if (!window) {
     return `<td class="quota-cell"><span class="cell-detail">Ожидание</span></td>`;
   }
-  const level = window.percentRemaining < 10 ? "critical" : window.percentRemaining < 25 ? "warning" : "ok";
+  const color = quotaColor(window.percentRemaining);
   return `
     <td class="quota-cell">
-      <div class="meter ${level}">
-        <span style="width:${window.percentRemaining}%"></span>
+      <div class="meter">
+        <span style="width:${window.percentRemaining}%; background:${color}"></span>
       </div>
       <div class="quota-line">
         <strong>${formatPercent(window.percentRemaining)}</strong>
@@ -314,7 +313,7 @@ function openAccountDialog(account = null) {
   els.workspaceId.value = account?.workspaceId || "";
   els.authCookie.value = "";
   els.authCookie.required = !account;
-  els.authCookie.placeholder = account ? "Оставьте пустым, чтобы сохранить текущую куку" : "кука авторизации";
+  els.authCookie.placeholder = account ? "Оставьте пустым, чтобы сохранить текущий cookie" : "cookie авторизации";
   els.notes.value = account?.notes || "";
   els.enabled.checked = account?.enabled ?? true;
   els.dialog.showModal();
@@ -504,6 +503,11 @@ function setStatus(text, level = "") {
 
 function formatPercent(value) {
   return `${Math.round(value)}%`;
+}
+
+function quotaColor(percent) {
+  const pct = Math.max(0, Math.min(100, percent));
+  return `hsl(${(pct / 100) * 120}, 72%, 52%)`;
 }
 
 function formatMoney(value) {
