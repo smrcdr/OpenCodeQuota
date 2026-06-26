@@ -282,9 +282,7 @@ function renderTable() {
           <button class="icon-button" data-action="check" data-id="${id}" title="Обновить">${icons.refresh}</button>
           <button class="icon-button" data-action="key-check" data-id="${id}" title="Проверить API-ключ">${icons.key}</button>
           <button class="icon-button" data-action="key-copy" data-id="${id}" title="Копировать API-ключ">${icons.copy}</button>
-          <span class="sep"></span>
           <button class="icon-button" data-action="browser-open" data-id="${id}" title="Открыть дашборд">${icons.external}</button>
-          <span class="sep"></span>
           <button class="icon-button" data-action="edit" data-id="${id}" title="Изменить">${icons.edit}</button>
           <button class="icon-button danger" data-action="delete" data-id="${id}" title="Удалить">${icons.trash}</button>
         </div>

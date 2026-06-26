@@ -54,7 +54,7 @@ button, input, textarea { font: inherit; }
 button { cursor: pointer; }
 
 .shell {
-  width: min(1440px, calc(100vw - 28px));
+  width: min(1620px, calc(100vw - 28px));
   margin: 0 auto;
   padding: var(--s-6) 0 var(--s-8);
 }
@@ -282,14 +282,14 @@ th {
   letter-spacing: 0.06em;
   white-space: nowrap;
 }
-th:nth-child(1) { width: 150px; }
-th:nth-child(2) { width: 140px; }
+th:nth-child(1) { width: 210px; }
+th:nth-child(2) { width: 130px; }
 th:nth-child(3),
 th:nth-child(4),
-th:nth-child(5) { width: 120px; }
-th:nth-child(6) { width: 150px; }
-th:nth-child(7) { width: 180px; }
-th:nth-child(8) { width: 220px; }
+th:nth-child(5) { width: 118px; }
+th:nth-child(6) { width: 140px; }
+th:nth-child(7) { width: 174px; }
+th:nth-child(8) { width: 200px; }
 
 td { font-size: var(--fs-base); }
 
