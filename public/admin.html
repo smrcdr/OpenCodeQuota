@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content="OpenCode Go quota and API key monitor" />
-    <title>OpenCode Go Quota</title>
+    <title>OpenCode Go — Консоль квот</title>
     <link rel="stylesheet" href="/assets/styles.css" />
   </head>
   <body>
@@ -12,9 +12,9 @@
       <section class="login" id="loginPanel" hidden>
         <form class="login-box" id="loginForm">
           <p class="eyebrow">OpenCode Go</p>
-          <h1>Quota console</h1>
+          <h1>Консоль квот</h1>
           <label>
-            <span>Admin token</span>
+            <span>Админ-токен</span>
             <input id="adminToken" type="password" autocomplete="current-password" />
           </label>
           <button class="button primary" type="submit">Войти</button>
@@ -26,18 +26,18 @@
         <header class="topbar">
           <div>
             <p class="eyebrow">OpenCode Go</p>
-            <h1>Quota console</h1>
+            <h1>Консоль квот</h1>
           </div>
           <div class="topbar-actions">
             <span class="status" id="statusText">Загрузка</span>
             <div class="action-group">
-              <button class="button" id="refreshAllButton" type="button">Refresh all</button>
-              <button class="button" id="copyBestKeyButton" type="button">Copy best key</button>
-              <button class="button" id="exportKeysButton" type="button">Export keys</button>
+              <button class="button" id="refreshAllButton" type="button">Обновить все</button>
+              <button class="button" id="copyBestKeyButton" type="button">Копировать лучший ключ</button>
+              <button class="button" id="exportKeysButton" type="button">Экспорт ключей</button>
             </div>
-            <button class="button primary" id="addButton" type="button">Add account</button>
+            <button class="button primary" id="addButton" type="button">Добавить аккаунт</button>
             <span class="action-divider"></span>
-            <button class="button subtle" id="logoutButton" type="button">Logout</button>
+            <button class="button subtle" id="logoutButton" type="button">Выйти</button>
           </div>
         </header>
 
@@ -47,9 +47,9 @@
           <div class="meta">
             <strong id="accountCount">0 accounts</strong>
             <span class="dot">·</span>
-            <span id="healthText">No checks yet</span>
+            <span id="healthText">Проверок ещё нет</span>
           </div>
-          <button class="icon-button" id="reloadButton" type="button" title="Reload" aria-label="Reload">
+          <button class="icon-button" id="reloadButton" type="button" title="Обновить" aria-label="Обновить">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
           </button>
         </section>
@@ -58,19 +58,19 @@
           <table>
             <thead>
               <tr>
-                <th>Account</th>
-                <th>Workspace</th>
-                <th>5h</th>
-                <th>Weekly</th>
-                <th>Monthly</th>
-                <th>API key</th>
-                <th>Status</th>
-                <th class="actions-cell">Actions</th>
+                <th>Аккаунт</th>
+                <th>Рабочая область</th>
+                <th>5ч</th>
+                <th>Неделя</th>
+                <th>Месяц</th>
+                <th>API-ключ</th>
+                <th>Статус</th>
+                <th class="actions-cell">Действия</th>
               </tr>
             </thead>
             <tbody id="quotaRows"></tbody>
           </table>
-          <div class="empty" id="emptyState" hidden>No accounts configured.</div>
+          <div class="empty" id="emptyState" hidden>Аккаунты не настроены.</div>
         </section>
       </section>
     </main>
@@ -78,8 +78,8 @@
     <dialog id="accountDialog">
       <form method="dialog" class="account-form" id="accountForm">
         <header>
-          <h2 id="dialogTitle">Account</h2>
-          <button class="icon-button" value="cancel" type="submit" title="Close">×</button>
+          <h2 id="dialogTitle">Аккаунт</h2>
+          <button class="icon-button" value="cancel" type="submit" title="Закрыть">×</button>
         </header>
         <input id="editingId" type="hidden" />
         <label>
@@ -87,58 +87,58 @@
           <input id="accountId" required maxlength="80" placeholder="go-main" />
         </label>
         <label>
-          <span>Name</span>
+          <span>Название</span>
           <input id="accountName" required placeholder="Main Go" />
         </label>
         <label>
-          <span>Workspace ID</span>
+          <span>ID рабочей области</span>
           <input id="workspaceId" required placeholder="workspace-id-from-url" />
         </label>
         <label>
-          <span>Auth cookie</span>
-          <input id="authCookie" type="password" autocomplete="off" placeholder="auth cookie" />
+          <span>Кука авторизации</span>
+          <input id="authCookie" type="password" autocomplete="off" placeholder="кука авторизации" />
         </label>
         <label>
-          <span>Notes</span>
+          <span>Заметки</span>
           <textarea id="notes" rows="3"></textarea>
         </label>
         <label class="checkbox-row">
           <input id="enabled" type="checkbox" checked />
-          <span>Enabled</span>
+          <span>Включён</span>
         </label>
         <p class="form-error" id="formError" role="alert"></p>
         <footer>
-          <button class="button subtle" value="cancel" type="submit">Cancel</button>
-          <button class="button primary" id="saveAccountButton" type="button">Save</button>
+          <button class="button subtle" value="cancel" type="submit">Отмена</button>
+          <button class="button primary" id="saveAccountButton" type="button">Сохранить</button>
         </footer>
       </form>
     </dialog>
 
     <dialog id="exportDialog">
-      <section class="export-panel" aria-label="Экспорт API keys">
+      <section class="export-panel" aria-label="Экспорт API-ключей">
         <header>
           <div>
-            <p class="eyebrow">Export</p>
-            <h2>API keys</h2>
+            <p class="eyebrow">Экспорт</p>
+            <h2>API-ключи</h2>
           </div>
-          <button class="icon-button" id="closeExportButton" type="button" title="Close">×</button>
+          <button class="icon-button" id="closeExportButton" type="button" title="Закрыть">×</button>
         </header>
 
         <div class="export-body">
           <div class="segmented" role="tablist" aria-label="Формат экспорта">
-            <button class="segment active" id="exportJsonTab" type="button" data-export-format="json">Full JSON</button>
-            <button class="segment" id="exportKeysTab" type="button" data-export-format="keys">Keys only</button>
+            <button class="segment active" id="exportJsonTab" type="button" data-export-format="json">Полный JSON</button>
+            <button class="segment" id="exportKeysTab" type="button" data-export-format="keys">Только ключи</button>
           </div>
 
-          <p class="export-meta" id="exportMeta">No export loaded</p>
+          <p class="export-meta" id="exportMeta">Экспорт не загружен</p>
           <textarea id="exportText" readonly spellcheck="false"></textarea>
         </div>
 
         <footer>
-          <button class="button subtle" id="refreshExportButton" type="button">Refresh</button>
+          <button class="button subtle" id="refreshExportButton" type="button">Обновить</button>
           <div class="footer-actions">
-            <button class="button" id="copyExportButton" type="button">Copy</button>
-            <button class="button primary" id="downloadExportButton" type="button">Download</button>
+            <button class="button" id="copyExportButton" type="button">Копировать</button>
+            <button class="button primary" id="downloadExportButton" type="button">Скачать</button>
           </div>
         </footer>
       </section>

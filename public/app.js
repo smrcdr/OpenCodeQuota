@@ -61,6 +61,40 @@ const icons = {
   trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>',
 };
 
+const REASON_LABELS = {
+  ok: "ок",
+  available: "доступен",
+  error: "ошибка",
+  pending: "ожидание",
+  disabled: "отключён",
+  stale: "устарел",
+  quota_low: "мало квоты",
+};
+
+const ERROR_LABELS = {
+  api_key_not_found: "ключ не найден",
+  account_disabled: "аккаунт отключён",
+  login_redirect: "нужен вход (кука устарела)",
+};
+
+function reasonLabel(value) {
+  return REASON_LABELS[value] || value;
+}
+
+function errorLabel(value) {
+  if (!value) return value;
+  return ERROR_LABELS[value] || value;
+}
+
+function pluralRu(n, one, few, many) {
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  if (mod10 === 1 && mod100 !== 11) return `${n} ${one}`;
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return `${n} ${few}`;
+  return `${n} ${many}`;
+}
+
+
 els.loginForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   els.loginError.textContent = "";
@@ -129,7 +163,7 @@ document.addEventListener("click", async (event) => {
   }
   if (action === "delete") {
     const account = state.accounts.find((item) => item.id === id);
-    if (!confirm(`Delete ${account?.name || id}?`)) {
+    if (!confirm(`Удалить ${account?.name || id}?`)) {
       return;
     }
     await withStatus("Удаляю", async () => {
@@ -173,10 +207,10 @@ async function loadAll() {
 function render() {
   renderSummary();
   renderTable();
-  els.accountCount.textContent = plural(state.accounts.length, "account", "accounts");
+  els.accountCount.textContent = pluralRu(state.accounts.length, "аккаунт", "аккаунта", "аккаунтов");
   els.healthText.textContent = state.health?.newestCheckAgeSeconds === null
-    ? "No checks yet"
-    : `Last check ${formatAge(state.health.newestCheckAgeSeconds)} ago`;
+    ? "Проверок ещё нет"
+    : `Последняя проверка ${formatAge(state.health.newestCheckAgeSeconds)} назад`;
 }
 
 function renderSummary() {
@@ -184,9 +218,9 @@ function renderSummary() {
   const low = state.availability.filter((item) => item.reason === "quota_low").length;
   const errors = state.availability.filter((item) => ["error", "stale", "pending"].includes(item.reason)).length;
   const cards = [
-    ["Available", available, "ok"],
-    ["Quota low", low, "warning"],
-    ["Needs attention", errors, "critical"],
+    ["Доступно", available, "ok"],
+    ["Мало квоты", low, "warning"],
+    ["Требует внимания", errors, "critical"],
   ];
   els.summaryGrid.replaceChildren(...cards.map(([label, value, level]) => {
     const item = document.createElement("article");
@@ -216,14 +250,14 @@ function renderTable() {
       <td>${statusPill(quota, availability)}</td>
       <td class="actions-cell">
         <div class="row-actions">
-          <button class="icon-button" data-action="check" data-id="${id}" title="Refresh">${icons.refresh}</button>
-          <button class="icon-button" data-action="key-check" data-id="${id}" title="Check API key">${icons.key}</button>
-          <button class="icon-button" data-action="key-copy" data-id="${id}" title="Copy API key">${icons.copy}</button>
+          <button class="icon-button" data-action="check" data-id="${id}" title="Обновить">${icons.refresh}</button>
+          <button class="icon-button" data-action="key-check" data-id="${id}" title="Проверить API-ключ">${icons.key}</button>
+          <button class="icon-button" data-action="key-copy" data-id="${id}" title="Копировать API-ключ">${icons.copy}</button>
           <span class="sep"></span>
-          <button class="icon-button wide" data-action="browser-open" data-id="${id}" title="Open dashboard">${icons.external}<span>Open</span></button>
+          <button class="icon-button wide" data-action="browser-open" data-id="${id}" title="Открыть дашборд">${icons.external}<span>Открыть</span></button>
           <span class="sep"></span>
-          <button class="icon-button" data-action="edit" data-id="${id}" title="Edit">${icons.edit}</button>
-          <button class="icon-button danger" data-action="delete" data-id="${id}" title="Delete">${icons.trash}</button>
+          <button class="icon-button" data-action="edit" data-id="${id}" title="Изменить">${icons.edit}</button>
+          <button class="icon-button danger" data-action="delete" data-id="${id}" title="Удалить">${icons.trash}</button>
         </div>
       </td>
     `;
@@ -233,17 +267,17 @@ function renderTable() {
 
 function apiKeyCell(account) {
   if (account.apiKeyFound) {
-    return `<span class="pill ok">found</span><span class="cell-detail mono">${escapeHtml(account.apiKeyMasked)}</span>`;
+    return `<span class="pill ok">найден</span><span class="cell-detail mono">${escapeHtml(account.apiKeyMasked)}</span>`;
   }
   if (account.apiKeyError) {
-    return `<span class="pill critical">missing</span><span class="cell-detail">${escapeHtml(account.apiKeyError)}</span>`;
+    return `<span class="pill critical">отсутствует</span><span class="cell-detail">${escapeHtml(errorLabel(account.apiKeyError))}</span>`;
   }
-  return `<span class="pill">not checked</span><span class="cell-detail">Use check key</span>`;
+  return `<span class="pill">не проверен</span><span class="cell-detail">Проверьте ключ</span>`;
 }
 
 function windowCell(window) {
   if (!window) {
-    return `<td class="quota-cell"><span class="cell-detail">Waiting</span></td>`;
+    return `<td class="quota-cell"><span class="cell-detail">Ожидание</span></td>`;
   }
   const level = window.percentRemaining < 10 ? "critical" : window.percentRemaining < 25 ? "warning" : "ok";
   return `
@@ -262,17 +296,17 @@ function windowCell(window) {
 
 function statusPill(quota, availability) {
   const reason = availability?.reason || quota.status;
-  const label = quota.stale ? "stale" : reason;
+  const label = reasonLabel(quota.stale ? "stale" : reason);
   const level = availability?.available ? "ok" : reason === "quota_low" ? "warning" : "critical";
   const detail = quota.error
-    ? `<span class="cell-detail">${escapeHtml(quota.error)}</span>`
-    : `<span class="cell-detail">${quota.checkedAt ? formatDate(quota.checkedAt) : "Not checked"}</span>`;
+    ? `<span class="cell-detail">${escapeHtml(errorLabel(quota.error))}</span>`
+    : `<span class="cell-detail">${quota.checkedAt ? formatDate(quota.checkedAt) : "Не проверен"}</span>`;
   return `<span class="pill ${level}">${escapeHtml(label)}</span>${detail}`;
 }
 
 function openAccountDialog(account = null) {
   els.formError.textContent = "";
-  els.dialogTitle.textContent = account ? "Edit account" : "Add account";
+  els.dialogTitle.textContent = account ? "Изменить аккаунт" : "Добавить аккаунт";
   els.editingId.value = account?.id || "";
   els.accountId.value = account?.id || "";
   els.accountId.disabled = Boolean(account);
@@ -280,7 +314,7 @@ function openAccountDialog(account = null) {
   els.workspaceId.value = account?.workspaceId || "";
   els.authCookie.value = "";
   els.authCookie.required = !account;
-  els.authCookie.placeholder = account ? "Leave empty to keep current cookie" : "auth cookie";
+  els.authCookie.placeholder = account ? "Оставьте пустым, чтобы сохранить текущую куку" : "кука авторизации";
   els.notes.value = account?.notes || "";
   els.enabled.checked = account?.enabled ?? true;
   els.dialog.showModal();
@@ -336,7 +370,7 @@ async function copyBestApiKey() {
 async function openAccountBrowser(id) {
   await withStatus("Открываю Chrome", async () => {
     const result = await api(`/api/accounts/${encodeURIComponent(id)}/browser/open`, { method: "POST" });
-    setStatus(`Chrome opened: ${result.session.accountName || result.session.accountId}`, "saved");
+    setStatus(`Chrome открыт: ${result.session.accountName || result.session.accountId}`, "saved");
   });
 }
 
@@ -364,15 +398,15 @@ function renderExportDialog() {
   els.exportKeysTab.classList.toggle("active", exportState.format === "keys");
 
   if (!exportState.data) {
-    els.exportMeta.textContent = "No export loaded";
+    els.exportMeta.textContent = "Экспорт не загружен";
     els.exportText.value = "";
     return;
   }
 
   const keys = exportState.data.accounts.map((item) => item.apiKey).filter(Boolean);
   els.exportMeta.textContent = exportState.format === "json"
-    ? `Full export: ${exportState.data.found}/${exportState.data.count} keys found`
-    : `9router import list: ${keys.length} keys, one per line`;
+    ? `Полный экспорт: найдено ${exportState.data.found}/${exportState.data.count}`
+    : `Список импорта 9router: ${pluralRu(keys.length, "ключ", "ключа", "ключей")}, по одному в строке`;
   els.exportText.value = exportState.format === "json"
     ? JSON.stringify(exportState.data, null, 2) + "\n"
     : keys.join("\n") + (keys.length ? "\n" : "");
@@ -409,10 +443,10 @@ function downloadText(filename, value, type) {
 
 async function copyToClipboard(value) {
   if (!value) {
-    throw new Error("API key is empty");
+    throw new Error("API-ключ пуст");
   }
   if (!navigator.clipboard?.writeText) {
-    throw new Error("Clipboard API is unavailable");
+    throw new Error("Clipboard API недоступен");
   }
   await navigator.clipboard.writeText(value);
 }
@@ -479,25 +513,21 @@ function formatMoney(value) {
 function formatReset(value) {
   const time = Date.parse(value);
   if (!Number.isFinite(time)) {
-    return "no reset";
+    return "без сброса";
   }
   const seconds = Math.max(0, Math.round((time - Date.now()) / 1000));
-  return `resets in ${formatAge(seconds)}`;
+  return `сброс через ${formatAge(seconds)}`;
 }
 
 function formatAge(seconds) {
-  if (seconds < 60) return `${seconds}s`;
-  if (seconds < 3600) return `${Math.round(seconds / 60)}m`;
-  if (seconds < 86400) return `${Math.round(seconds / 3600)}h`;
-  return `${Math.round(seconds / 86400)}d`;
+  if (seconds < 60) return `${seconds}с`;
+  if (seconds < 3600) return `${Math.round(seconds / 60)}м`;
+  if (seconds < 86400) return `${Math.round(seconds / 3600)}ч`;
+  return `${Math.round(seconds / 86400)}д`;
 }
 
 function formatDate(value) {
-  return new Date(value).toLocaleString();
-}
-
-function plural(value, singular, pluralValue) {
-  return `${value} ${value === 1 ? singular : pluralValue}`;
+  return new Date(value).toLocaleString("ru-RU");
 }
 
 function escapeHtml(value) {
