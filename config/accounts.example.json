@@ -1,0 +1,12 @@
+{
+  "accounts": [
+    {
+      "id": "go-main",
+      "name": "Main Go",
+      "workspaceId": "workspace-id-from-url",
+      "authCookie": "cookie-value",
+      "enabled": true,
+      "notes": ""
+    }
+  ]
+}

@@ -1,0 +1,5 @@
+.env
+data/
+config/accounts.json
+node_modules/
+npm-debug.log*

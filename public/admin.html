@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="OpenCode Go quota and API key monitor" />
+    <title>OpenCode Go Quota</title>
+    <link rel="stylesheet" href="/assets/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="login" id="loginPanel" hidden>
+        <form class="login-box" id="loginForm">
+          <p class="eyebrow">OpenCode Go</p>
+          <h1>Quota console</h1>
+          <label>
+            <span>Admin token</span>
+            <input id="adminToken" type="password" autocomplete="current-password" />
+          </label>
+          <button class="button primary" type="submit">Войти</button>
+          <p class="form-error" id="loginError" role="alert"></p>
+        </form>
+      </section>
+
+      <section id="appPanel" hidden>
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">OpenCode Go</p>
+            <h1>Quota console</h1>
+          </div>
+          <div class="topbar-actions">
+            <span class="status" id="statusText">Загрузка</span>
+            <button class="button" id="refreshAllButton" type="button">Refresh all</button>
+            <button class="button" id="copyBestKeyButton" type="button">Copy best key</button>
+            <button class="button" id="exportKeysButton" type="button">Export keys</button>
+            <button class="button" id="addButton" type="button">Add account</button>
+            <button class="button subtle" id="logoutButton" type="button">Logout</button>
+          </div>
+        </header>
+
+        <section class="summary-grid" id="summaryGrid" aria-label="Сводка"></section>
+
+        <section class="toolbar" aria-label="Статус мониторинга">
+          <div>
+            <strong id="accountCount">0 accounts</strong>
+            <span id="healthText">No checks yet</span>
+          </div>
+          <button class="icon-button" id="reloadButton" type="button" title="Reload">↻</button>
+        </section>
+
+        <section class="table-wrap" aria-label="Аккаунты">
+          <table>
+            <thead>
+              <tr>
+                <th>Account</th>
+                <th>Workspace</th>
+                <th>5h</th>
+                <th>Weekly</th>
+                <th>Monthly</th>
+                <th>API key</th>
+                <th>Status</th>
+                <th class="actions-cell">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="quotaRows"></tbody>
+          </table>
+          <div class="empty" id="emptyState" hidden>No accounts configured.</div>
+        </section>
+      </section>
+    </main>
+
+    <dialog id="accountDialog">
+      <form method="dialog" class="account-form" id="accountForm">
+        <header>
+          <h2 id="dialogTitle">Account</h2>
+          <button class="icon-button" value="cancel" type="submit" title="Close">×</button>
+        </header>
+        <input id="editingId" type="hidden" />
+        <label>
+          <span>ID</span>
+          <input id="accountId" required maxlength="80" placeholder="go-main" />
+        </label>
+        <label>
+          <span>Name</span>
+          <input id="accountName" required placeholder="Main Go" />
+        </label>
+        <label>
+          <span>Workspace ID</span>
+          <input id="workspaceId" required placeholder="workspace-id-from-url" />
+        </label>
+        <label>
+          <span>Auth cookie</span>
+          <input id="authCookie" type="password" autocomplete="off" placeholder="auth cookie" />
+        </label>
+        <label>
+          <span>Notes</span>
+          <textarea id="notes" rows="3"></textarea>
+        </label>
+        <label class="checkbox-row">
+          <input id="enabled" type="checkbox" checked />
+          <span>Enabled</span>
+        </label>
+        <p class="form-error" id="formError" role="alert"></p>
+        <footer>
+          <button class="button subtle" value="cancel" type="submit">Cancel</button>
+          <button class="button primary" id="saveAccountButton" type="button">Save</button>
+        </footer>
+      </form>
+    </dialog>
+
+    <dialog id="exportDialog">
+      <section class="export-panel" aria-label="Экспорт API keys">
+        <header>
+          <div>
+            <p class="eyebrow">Export</p>
+            <h2>API keys</h2>
+          </div>
+          <button class="icon-button" id="closeExportButton" type="button" title="Close">×</button>
+        </header>
+
+        <div class="export-body">
+          <div class="segmented" role="tablist" aria-label="Формат экспорта">
+            <button class="segment active" id="exportJsonTab" type="button" data-export-format="json">Full JSON</button>
+            <button class="segment" id="exportKeysTab" type="button" data-export-format="keys">Keys only</button>
+          </div>
+
+          <p class="export-meta" id="exportMeta">No export loaded</p>
+          <textarea id="exportText" readonly spellcheck="false"></textarea>
+        </div>
+
+        <footer>
+          <button class="button subtle" id="refreshExportButton" type="button">Refresh</button>
+          <div class="footer-actions">
+            <button class="button" id="copyExportButton" type="button">Copy</button>
+            <button class="button primary" id="downloadExportButton" type="button">Download</button>
+          </div>
+        </footer>
+      </section>
+    </dialog>
+
+    <script type="module" src="/assets/app.js"></script>
+  </body>
+</html>
