@@ -129,8 +129,8 @@ button { cursor: pointer; }
 .button.subtle { color: var(--muted); }
 
 .icon-button {
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   display: inline-grid;
   place-items: center;
   color: var(--muted);
@@ -258,8 +258,8 @@ button { cursor: pointer; }
 }
 
 table {
-  width: 100%;
-  min-width: 1100px;
+  width: calc(100% - 1px);
+  table-layout: fixed;
   border-collapse: collapse;
 }
 
@@ -282,6 +282,14 @@ th {
   letter-spacing: 0.06em;
   white-space: nowrap;
 }
+th:nth-child(1) { width: 150px; }
+th:nth-child(2) { width: 140px; }
+th:nth-child(3),
+th:nth-child(4),
+th:nth-child(5) { width: 120px; }
+th:nth-child(6) { width: 150px; }
+th:nth-child(7) { width: 180px; }
+th:nth-child(8) { width: 220px; }
 
 td { font-size: var(--fs-base); }
 
@@ -296,7 +304,7 @@ td strong {
   line-height: 1.15;
 }
 
-td .sub { display: block; color: var(--muted); }
+td .sub { display: block; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 td code {
   color: var(--blue);
@@ -306,17 +314,17 @@ td code {
 
 .workspace-code {
   display: inline-block;
-  max-width: 200px;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   vertical-align: bottom;
 }
 
 /* ---------- Quota cell ---------- */
-.quota-cell { min-width: 150px; }
+.quota-cell { min-width: 124px; }
 
 .meter {
-  width: 140px;
+  width: 116px;
   height: 6px;
   margin-bottom: var(--s-2);
   overflow: hidden;
@@ -334,7 +342,7 @@ td code {
   align-items: baseline;
   justify-content: space-between;
   gap: var(--s-2);
-  width: 140px;
+  width: 116px;
 }
 
 .quota-line strong { margin: 0; font-size: var(--fs-md); font-weight: 800; }
@@ -364,7 +372,7 @@ td code {
 
 /* ---------- Actions cell ---------- */
 .actions-cell {
-  width: 240px;
+  width: 230px;
   white-space: nowrap;
   text-align: right;
 }
