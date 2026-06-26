@@ -50,6 +50,7 @@ const els = {
   googleCount: document.querySelector("#googleCount"),
   googleError: document.querySelector("#googleError"),
   googleList: document.querySelector("#googleList"),
+  loginAllGoogleButton: document.querySelector("#loginAllGoogleButton"),
   exportDialog: document.querySelector("#exportDialog"),
   closeExportButton: document.querySelector("#closeExportButton"),
   refreshExportButton: document.querySelector("#refreshExportButton"),
@@ -67,6 +68,7 @@ const exportState = {
 };
 
 const googleRows = {};
+let googleBatchRunning = false;
 
 const icons = {
   refresh: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>',
@@ -149,6 +151,7 @@ els.logoutButton.addEventListener("click", async () => {
 });
 els.saveAccountButton.addEventListener("click", saveAccount);
 els.saveJsonButton.addEventListener("click", saveJsonAccounts);
+els.loginAllGoogleButton.addEventListener("click", loginAllGoogleAccounts);
 els.tabForm.addEventListener("click", () => setDialogTab("form"));
 els.tabJson.addEventListener("click", () => setDialogTab("json"));
 els.tabGoogle.addEventListener("click", () => setDialogTab("google"));
@@ -161,7 +164,9 @@ els.googleAccounts.addEventListener("input", () => {
 document.addEventListener("click", async (event) => {
   const googleButton = event.target.closest("button[data-google-login]");
   if (googleButton) {
-    await loginGoogleAccount(googleButton.dataset.googleLogin);
+    if (!googleBatchRunning) {
+      await loginGoogleAccount(googleButton.dataset.googleLogin);
+    }
     return;
   }
   const button = event.target.closest("button[data-action]");
@@ -340,6 +345,9 @@ function openAccountDialog(account = null) {
   for (const key of Object.keys(googleRows)) {
     delete googleRows[key];
   }
+  googleBatchRunning = false;
+  els.loginAllGoogleButton.disabled = false;
+  els.loginAllGoogleButton.textContent = "Войти во все";
   updateGoogleCount();
   renderGoogleList();
 
@@ -371,6 +379,7 @@ function setDialogTab(tab) {
   }
   els.saveAccountButton.hidden = tab !== "form";
   els.saveJsonButton.hidden = tab !== "json";
+  els.loginAllGoogleButton.hidden = tab !== "google";
   if (tab === "form") els.formError.textContent = "";
   if (tab === "json") els.jsonError.textContent = "";
   if (tab === "google") els.googleError.textContent = "";
@@ -521,6 +530,38 @@ async function loginGoogleAccount(email) {
     setStatus(error.message, "error");
   }
   renderGoogleList();
+}
+
+async function loginAllGoogleAccounts() {
+  if (googleBatchRunning) {
+    return;
+  }
+  const emails = parseGoogleAccounts()
+    .map((item) => item.email)
+    .filter((email) => {
+      const row = googleRows[email];
+      return row && row.status !== "ok" && row.status !== "loading";
+    });
+  if (emails.length === 0) {
+    setStatus("Нет аккаунтов для входа", "dirty");
+    return;
+  }
+  googleBatchRunning = true;
+  els.loginAllGoogleButton.disabled = true;
+  els.loginAllGoogleButton.textContent = `Входим… (0/${emails.length})`;
+  let success = 0;
+  for (let i = 0; i < emails.length; i++) {
+    const email = emails[i];
+    els.loginAllGoogleButton.textContent = `Входим… (${i}/${emails.length})`;
+    await loginGoogleAccount(email);
+    if (googleRows[email]?.status === "ok") {
+      success++;
+    }
+  }
+  googleBatchRunning = false;
+  els.loginAllGoogleButton.disabled = false;
+  els.loginAllGoogleButton.textContent = "Войти во все";
+  setStatus(`Готово: ${success}/${emails.length} аккаунтов`, success === emails.length ? "saved" : "dirty");
 }
 
 async function saveAccount() {
