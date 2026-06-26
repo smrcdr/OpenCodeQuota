@@ -115,40 +115,62 @@ export async function loginWithGoogle({ email, password }, config = GOOGLE_LOGIN
   const chromium = patchright.chromium || patchright.default?.chromium;
 
   let browser;
+  const deadline = Date.now() + (config.navTimeoutMs + config.stepTimeoutMs * 4 + 15000);
+  const watchdog = new Promise((resolve) => {
+    const ms = Math.max(0, deadline - Date.now());
+    setTimeout(() => resolve(new GoogleLoginError("timeout")), ms);
+  });
+
+  const run = (async () => {
+    try {
+      browser = await chromium.launch({ headless: !config.headed });
+      const context = await browser.newContext();
+      const page = await context.newPage();
+      page.setDefaultTimeout(config.stepTimeoutMs);
+
+      await page.goto(config.authUrl, { timeout: config.navTimeoutMs, waitUntil: "domcontentloaded" });
+      await clickGoogleButton(page, config);
+      await fillEmail(page, email, config);
+      await fillPassword(page, password, config);
+
+      const match = page.url().match(config.workspaceUrlPattern);
+      if (!match) {
+        throw new GoogleLoginError("no_workspace");
+      }
+      const workspaceId = match[1];
+      const cookies = await context.cookies();
+      const auth = cookies.find((cookie) => cookie.name === config.authCookieName);
+      if (!auth) {
+        throw new GoogleLoginError("no_auth_cookie");
+      }
+      return { workspaceId, authCookie: auth.value, email };
+    } catch (error) {
+      if (error instanceof GoogleLoginError) {
+        throw error;
+      }
+      if (error?.name === "TimeoutError") {
+        throw new GoogleLoginError("timeout");
+      }
+      if (/ENOENT|spawn|executable|browser.*not.*found/i.test(error?.message || "")) {
+        throw new GoogleLoginError("patchright_not_installed");
+      }
+      throw new GoogleLoginError("unknown");
+    }
+  })();
+
   try {
-    browser = await chromium.launch({ headless: !config.headed });
-    const context = await browser.newContext();
-    const page = await context.newPage();
-    page.setDefaultTimeout(config.stepTimeoutMs);
-
-    await page.goto(config.authUrl, { timeout: config.navTimeoutMs, waitUntil: "domcontentloaded" });
-    await clickGoogleButton(page, config);
-    await fillEmail(page, email, config);
-    await fillPassword(page, password, config);
-
-    const match = page.url().match(config.workspaceUrlPattern);
-    if (!match) {
-      throw new GoogleLoginError("no_workspace");
+    const result = await Promise.race([run, watchdog]);
+    if (result instanceof GoogleLoginError) {
+      throw result;
     }
-    const workspaceId = match[1];
-    const cookies = await context.cookies();
-    const auth = cookies.find((cookie) => cookie.name === config.authCookieName);
-    if (!auth) {
-      throw new GoogleLoginError("no_auth_cookie");
-    }
-    return { workspaceId, authCookie: auth.value, email };
-  } catch (error) {
-    if (error instanceof GoogleLoginError) {
-      throw error;
-    }
-    if (error?.name === "TimeoutError") {
-      throw new GoogleLoginError("timeout");
-    }
-    if (/ENOENT|spawn|executable|browser.*not.*found/i.test(error?.message || "")) {
-      throw new GoogleLoginError("patchright_not_installed");
-    }
-    throw new GoogleLoginError("unknown");
+    return result;
   } finally {
+    try {
+      const proc = browser?._process || browser?._browserProcess;
+      if (proc && typeof proc.kill === "function") {
+        try { proc.kill("SIGKILL"); } catch {}
+      }
+    } catch {}
     await browser?.close().catch(() => {});
   }
 }
