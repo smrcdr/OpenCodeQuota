@@ -11,6 +11,8 @@ export const GOOGLE_LOGIN_CONFIG = {
   authCookieName: "auth",
   navTimeoutMs: 60000,
   stepTimeoutMs: 25000,
+  loginTimeoutMs: 150000,
+  betweenAccountsMs: 2500,
 };
 
 const ERROR_MESSAGES = {
@@ -61,6 +63,19 @@ async function detectGoogleError(page) {
   return null;
 }
 
+function mapError(error) {
+  if (error instanceof GoogleLoginError) {
+    return error;
+  }
+  if (error?.name === "TimeoutError") {
+    return new GoogleLoginError("timeout");
+  }
+  if (/ENOENT|spawn|executable|browser.*not.*found|Target closed|Target page has been closed/i.test(error?.message || "")) {
+    return new GoogleLoginError("patchright_not_installed");
+  }
+  return new GoogleLoginError("unknown");
+}
+
 async function clickGoogleButton(page, config) {
   try {
     await page.locator(config.googleButtonSelector).first().click({ timeout: config.stepTimeoutMs });
@@ -101,6 +116,55 @@ async function fillPassword(page, password, config) {
   throw new GoogleLoginError((await detectGoogleError(page)) || "unusual_activity");
 }
 
+async function runGoogleLogin(context, { email, password }, config) {
+  const page = await context.newPage();
+  page.setDefaultTimeout(config.stepTimeoutMs);
+  await page.goto(config.authUrl, { timeout: config.navTimeoutMs, waitUntil: "domcontentloaded" });
+  await clickGoogleButton(page, config);
+  await fillEmail(page, email, config);
+  await fillPassword(page, password, config);
+
+  const match = page.url().match(config.workspaceUrlPattern);
+  if (!match) {
+    throw new GoogleLoginError("no_workspace");
+  }
+  const workspaceId = match[1];
+  const cookies = await context.cookies();
+  const auth = cookies.find((cookie) => cookie.name === config.authCookieName);
+  if (!auth) {
+    throw new GoogleLoginError("no_auth_cookie");
+  }
+  return { workspaceId, authCookie: auth.value, email };
+}
+
+function withWatchdog(promise, config) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      setTimeout(() => reject(new GoogleLoginError("timeout")), config.loginTimeoutMs);
+    }),
+  ]);
+}
+
+async function timedClose(closable, ms = 5000) {
+  if (!closable) {
+    return;
+  }
+  try {
+    await Promise.race([
+      closable.close(),
+      new Promise((resolve) => setTimeout(resolve, ms)),
+    ]);
+  } catch {}
+}
+
+async function loadPatchright() {
+  const patchright = await import("patchright").catch(() => {
+    throw new GoogleLoginError("patchright_not_installed");
+  });
+  return patchright.chromium || patchright.default?.chromium;
+}
+
 export async function loginWithGoogle({ email, password }, config = GOOGLE_LOGIN_CONFIG) {
   if (!config.authUrl) {
     throw new GoogleLoginError("auth_url_missing");
@@ -109,68 +173,64 @@ export async function loginWithGoogle({ email, password }, config = GOOGLE_LOGIN
     throw new GoogleLoginError("unknown");
   }
 
-  const patchright = await import("patchright").catch(() => {
-    throw new GoogleLoginError("patchright_not_installed");
-  });
-  const chromium = patchright.chromium || patchright.default?.chromium;
-
+  const chromium = await loadPatchright();
   let browser;
-  const deadline = Date.now() + (config.navTimeoutMs + config.stepTimeoutMs * 4 + 15000);
-  const watchdog = new Promise((resolve) => {
-    const ms = Math.max(0, deadline - Date.now());
-    setTimeout(() => resolve(new GoogleLoginError("timeout")), ms);
-  });
-
-  const run = (async () => {
-    try {
-      browser = await chromium.launch({ headless: !config.headed });
-      const context = await browser.newContext();
-      const page = await context.newPage();
-      page.setDefaultTimeout(config.stepTimeoutMs);
-
-      await page.goto(config.authUrl, { timeout: config.navTimeoutMs, waitUntil: "domcontentloaded" });
-      await clickGoogleButton(page, config);
-      await fillEmail(page, email, config);
-      await fillPassword(page, password, config);
-
-      const match = page.url().match(config.workspaceUrlPattern);
-      if (!match) {
-        throw new GoogleLoginError("no_workspace");
-      }
-      const workspaceId = match[1];
-      const cookies = await context.cookies();
-      const auth = cookies.find((cookie) => cookie.name === config.authCookieName);
-      if (!auth) {
-        throw new GoogleLoginError("no_auth_cookie");
-      }
-      return { workspaceId, authCookie: auth.value, email };
-    } catch (error) {
-      if (error instanceof GoogleLoginError) {
-        throw error;
-      }
-      if (error?.name === "TimeoutError") {
-        throw new GoogleLoginError("timeout");
-      }
-      if (/ENOENT|spawn|executable|browser.*not.*found/i.test(error?.message || "")) {
-        throw new GoogleLoginError("patchright_not_installed");
-      }
-      throw new GoogleLoginError("unknown");
-    }
-  })();
-
   try {
-    const result = await Promise.race([run, watchdog]);
-    if (result instanceof GoogleLoginError) {
-      throw result;
-    }
-    return result;
-  } finally {
+    browser = await chromium.launch({ headless: !config.headed });
+    const context = await browser.newContext();
     try {
-      const proc = browser?._process || browser?._browserProcess;
-      if (proc && typeof proc.kill === "function") {
-        try { proc.kill("SIGKILL"); } catch {}
-      }
-    } catch {}
-    await browser?.close().catch(() => {});
+      return await withWatchdog(runGoogleLogin(context, { email, password }, config), config);
+    } finally {
+      await timedClose(context);
+    }
+  } catch (error) {
+    throw mapError(error);
+  } finally {
+    await timedClose(browser);
   }
+}
+
+export async function loginAllGoogle(accounts, config = GOOGLE_LOGIN_CONFIG) {
+  if (!config.authUrl) {
+    throw new GoogleLoginError("auth_url_missing");
+  }
+  const chromium = await loadPatchright();
+  const results = [];
+  let browser;
+  try {
+    browser = await chromium.launch({ headless: !config.headed });
+    for (const entry of accounts) {
+      const email = String(entry?.email || "").trim();
+      const password = String(entry?.password || "");
+      if (!email || !password) {
+        results.push({ email, ok: false, code: "unknown", message: ERROR_MESSAGES.unknown });
+        continue;
+      }
+      try {
+        const context = await browser.newContext();
+        let result;
+        try {
+          result = await withWatchdog(runGoogleLogin(context, { email, password }, config), config);
+        } finally {
+          await timedClose(context);
+        }
+        results.push({ email, ok: true, workspaceId: result.workspaceId, authCookie: result.authCookie });
+      } catch (error) {
+        const mapped = mapError(error);
+        results.push({ email, ok: false, code: mapped.code, message: mapped.message });
+      }
+      await new Promise((resolve) => setTimeout(resolve, config.betweenAccountsMs));
+    }
+  } catch (error) {
+    const mapped = mapError(error);
+    for (const entry of accounts) {
+      const email = String(entry?.email || "").trim();
+      if (!results.some((r) => r.email === email)) {
+        results.push({ email, ok: false, code: mapped.code, message: mapped.message });
+      }
+    }
+  } finally {
+    await timedClose(browser);
+  }
+  return results;
 }

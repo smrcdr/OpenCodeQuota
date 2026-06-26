@@ -536,32 +536,61 @@ async function loginAllGoogleAccounts() {
   if (googleBatchRunning) {
     return;
   }
-  const emails = parseGoogleAccounts()
-    .map((item) => item.email)
-    .filter((email) => {
-      const row = googleRows[email];
+  const accounts = parseGoogleAccounts()
+    .filter((item) => {
+      const row = googleRows[item.email];
       return row && row.status !== "ok" && row.status !== "loading";
-    });
-  if (emails.length === 0) {
+    })
+    .map((item) => ({ email: item.email, password: item.password }));
+  if (accounts.length === 0) {
     setStatus("Нет аккаунтов для входа", "dirty");
     return;
   }
   googleBatchRunning = true;
   els.loginAllGoogleButton.disabled = true;
-  els.loginAllGoogleButton.textContent = `Входим… (0/${emails.length})`;
-  let success = 0;
-  for (let i = 0; i < emails.length; i++) {
-    const email = emails[i];
-    els.loginAllGoogleButton.textContent = `Входим… (${i}/${emails.length})`;
-    await loginGoogleAccount(email);
-    if (googleRows[email]?.status === "ok") {
-      success++;
+  els.loginAllGoogleButton.textContent = `Входим… (${accounts.length})`;
+  for (const { email } of accounts) {
+    if (googleRows[email]) {
+      googleRows[email].status = "loading";
+      googleRows[email].message = "";
     }
+  }
+  renderGoogleList();
+  setStatus(`Входим во все (${accounts.length})…`, "dirty");
+  try {
+    const data = await api("/api/google-login-all", {
+      method: "POST",
+      body: JSON.stringify({ accounts }),
+    });
+    for (const r of data.results) {
+      const row = googleRows[r.email];
+      if (!row) {
+        continue;
+      }
+      if (r.ok) {
+        row.status = "ok";
+        row.message = "";
+      } else {
+        row.status = "error";
+        row.message = r.message || r.code || "ошибка";
+      }
+    }
+    await loadAll();
+    const ok = data.results.filter((r) => r.ok).length;
+    setStatus(`Готово: ${ok}/${data.results.length}`, ok === data.results.length ? "saved" : "dirty");
+  } catch (error) {
+    for (const { email } of accounts) {
+      if (googleRows[email]?.status === "loading") {
+        googleRows[email].status = "error";
+        googleRows[email].message = error.message;
+      }
+    }
+    setStatus(error.message, "error");
   }
   googleBatchRunning = false;
   els.loginAllGoogleButton.disabled = false;
   els.loginAllGoogleButton.textContent = "Войти во все";
-  setStatus(`Готово: ${success}/${emails.length} аккаунтов`, success === emails.length ? "saved" : "dirty");
+  renderGoogleList();
 }
 
 async function saveAccount() {

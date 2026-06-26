@@ -6,7 +6,7 @@ import { AccountStore, toPublicAccount, normalizeAccountId } from "./accounts.js
 import { BrowserSessionManager } from "./browser-session.js";
 import { loadDotEnv, readIntegerEnv } from "./env.js";
 import { buildCookie, parseCookies, readJsonRequest, sendJson, sendNoContent, serveStaticFile } from "./http-utils.js";
-import { loginWithGoogle, GoogleLoginError } from "./google-login.js";
+import { loginWithGoogle, loginAllGoogle, GoogleLoginError } from "./google-login.js";
 import { QuotaScheduler } from "./scheduler.js";
 import { QuotaState } from "./quota-state.js";
 
@@ -205,6 +205,55 @@ async function handleApi(req, res, url, ctx) {
         workspaceId: result.workspaceId,
       });
     }
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/google-login-all") {
+    if (!isRevealAuthorized(req, ctx.settings.adminToken)) {
+      return sendJson(res, 401, {
+        error: { message: "ADMIN_TOKEN is required for Google login", type: "unauthorized" },
+      });
+    }
+    const body = await readJsonRequest(req);
+    const input = Array.isArray(body?.accounts) ? body.accounts : [];
+    const accounts = input
+      .map((item) => ({ email: String(item?.email || "").trim(), password: String(item?.password || "") }))
+      .filter((item) => item.email && item.password);
+    if (accounts.length === 0) {
+      return sendJson(res, 400, { error: { message: "Нет аккаунтов для входа", type: "invalid_request" } });
+    }
+    const results = await loginAllGoogle(accounts);
+    for (const r of results) {
+      if (!r.ok) {
+        continue;
+      }
+      try {
+        const newId = normalizeAccountId(r.email);
+        const existing = ctx.accounts
+          .list()
+          .find((account) => account.workspaceId === r.workspaceId || account.id === newId);
+        if (existing) {
+          await ctx.accounts.update(existing.id, {
+            name: r.email,
+            workspaceId: r.workspaceId,
+            authCookie: r.authCookie,
+          });
+        } else {
+          await ctx.accounts.add({
+            name: r.email,
+            workspaceId: r.workspaceId,
+            authCookie: r.authCookie,
+            enabled: true,
+            notes: "Google login",
+          });
+        }
+      } catch (error) {
+        r.ok = false;
+        r.code = "account_error";
+        r.message = `Вход выполнен, но аккаунт не сохранён: ${error.message}`;
+      }
+    }
+    ctx.quotaState.syncAccounts();
+    return sendJson(res, 200, { results });
   }
 
   const checkMatch = url.pathname.match(/^\/api\/accounts\/([^/]+)\/check$/);
