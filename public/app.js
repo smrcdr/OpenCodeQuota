@@ -424,21 +424,26 @@ async function saveJsonAccounts() {
 }
 
 function updateGoogleCount() {
-  const lines = els.googleAccounts.value.split("\n").map((line) => line.trim()).filter(Boolean);
-  const valid = lines.filter((line) => line.split("|").map((part) => part.trim()).filter(Boolean).length >= 2).length;
-  els.googleCount.textContent = String(valid);
+  els.googleCount.textContent = String(parseGoogleAccounts().length);
 }
 
 function parseGoogleAccounts() {
-  return els.googleAccounts.value
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => {
-      const [email, ...rest] = line.split("|").map((part) => part.trim());
-      return { email, password: rest.join("|") };
-    })
-    .filter((item) => item.email && item.password);
+  const seen = new Set();
+  const result = [];
+  for (const line of els.googleAccounts.value.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      continue;
+    }
+    const [email, ...rest] = trimmed.split("|").map((part) => part.trim());
+    const password = rest.join("|");
+    if (!email || !password || seen.has(email)) {
+      continue;
+    }
+    seen.add(email);
+    result.push({ email, password });
+  }
+  return result;
 }
 
 function syncGoogleRows() {

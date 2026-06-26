@@ -2,7 +2,7 @@ import http from "node:http";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { AccountStore, toPublicAccount } from "./accounts.js";
+import { AccountStore, toPublicAccount, normalizeAccountId } from "./accounts.js";
 import { BrowserSessionManager } from "./browser-session.js";
 import { loadDotEnv, readIntegerEnv } from "./env.js";
 import { buildCookie, parseCookies, readJsonRequest, sendJson, sendNoContent, serveStaticFile } from "./http-utils.js";
@@ -173,19 +173,33 @@ async function handleApi(req, res, url, ctx) {
       });
     }
     try {
-      const account = await ctx.accounts.add({
-        name: email,
-        workspaceId: result.workspaceId,
-        authCookie: result.authCookie,
-        enabled: true,
-        notes: "Google login",
-      });
+      const newId = normalizeAccountId(email);
+      const existing = ctx.accounts
+        .list()
+        .find((account) => account.workspaceId === result.workspaceId || account.id === newId);
+      let account;
+      if (existing) {
+        account = await ctx.accounts.update(existing.id, {
+          name: email,
+          workspaceId: result.workspaceId,
+          authCookie: result.authCookie,
+        });
+      }
+      if (!account) {
+        account = await ctx.accounts.add({
+          name: email,
+          workspaceId: result.workspaceId,
+          authCookie: result.authCookie,
+          enabled: true,
+          notes: "Google login",
+        });
+      }
       ctx.quotaState.syncAccounts();
-      return sendJson(res, 201, { account: toPublicAccount(account) });
+      return sendJson(res, existing ? 200 : 201, { account: toPublicAccount(account) });
     } catch (error) {
       return sendJson(res, 409, {
         error: {
-          message: `Вход выполнен, но аккаунт не создан: ${error.message}`,
+          message: `Вход выполнен, но аккаунт не сохранён: ${error.message}`,
           type: "account_error",
         },
         workspaceId: result.workspaceId,
