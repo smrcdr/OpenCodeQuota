@@ -1,15 +1,16 @@
 export const GOOGLE_LOGIN_CONFIG = {
-  authUrl: "",
-  headed: false,
-  googleButtonSelector: 'button:has-text("Google"), a:has-text("Google")',
-  emailInputSelector: 'input[type="email"]',
-  emailNextSelector: "#identifierNext",
-  passwordInputSelector: 'input[type="password"]',
-  passwordNextSelector: "#passwordNext",
+  authUrl: "https://opencode.ai/auth",
+  headed: true,
+  googleButtonSelector: 'a:has-text("Continue with Google")',
+  emailInputSelector: '#identifierId, input[name="identifier"]',
+  emailNextSelector: '#identifierNext, button:has-text("Next")',
+  passwordInputSelector: 'input[type="password"], input[name="Passwd"]',
+  passwordNextSelector: '#passwordNext, button:has-text("Next")',
+  consentButtonSelector: 'button:has-text("Allow"), button:has-text("Continue"), button:has-text("Разрешить")',
   workspaceUrlPattern: /\/workspace\/(wrk_[A-Za-z0-9]+)/,
   authCookieName: "auth",
-  navTimeoutMs: 45000,
-  stepTimeoutMs: 20000,
+  navTimeoutMs: 60000,
+  stepTimeoutMs: 25000,
 };
 
 const ERROR_MESSAGES = {
@@ -19,6 +20,7 @@ const ERROR_MESSAGES = {
   google_email_missing: "Не найдено поле ввода email на Google",
   google_password_missing: "Не найдено поле ввода пароля на Google",
   wrong_password: "Неверный пароль",
+  account_not_found: "Аккаунт Google не найден",
   unusual_activity: "Google заподозрил подозрительную активность — нужен ручной вход",
   captcha: "Google показал капчу/проверку — нужен ручной вход",
   needs_2fa: "На аккаунте включена 2FA — автоматический вход невозможен",
@@ -37,16 +39,17 @@ export class GoogleLoginError extends Error {
 }
 
 const ERROR_PATTERNS = [
-  { code: "needs_2fa", re: /2-step|двухэтап|verification code|код подтверждения|2fa/i },
-  { code: "captcha", re: /captcha|recaptcha|hcaptcha/i },
-  { code: "unusual_activity", re: /unusual activity|verify it.s you|подозрительн|подтвердите|this device|challenge/i },
+  { code: "account_not_found", re: /couldn.t find|не удалось найти аккаунт|couldn.t find your google account/i },
   { code: "wrong_password", re: /wrong password|incorrect password|неправильн|couldn.t sign you in|не удалось войти/i },
+  { code: "needs_2fa", re: /2-step verification|двухэтапн|verification code|код подтверждения/i },
+  { code: "captcha", re: /captcha|recaptcha|hcaptcha/i },
+  { code: "unusual_activity", re: /unusual activity|verify it.s you|подозрительн|подтвердите|browser or app may not be secure|может быть небезопасн/i },
 ];
 
 async function detectGoogleError(page) {
   let text = "";
   try {
-    text = await page.content();
+    text = await page.evaluate(() => document.body?.innerText || "");
   } catch {
     return null;
   }
@@ -84,11 +87,18 @@ async function fillEmail(page, email, config) {
 async function fillPassword(page, password, config) {
   await page.locator(config.passwordInputSelector).first().fill(password);
   await page.locator(config.passwordNextSelector).first().click().catch(() => {});
-  try {
-    await page.waitForURL(config.workspaceUrlPattern, { timeout: config.navTimeoutMs });
-  } catch {
-    throw new GoogleLoginError((await detectGoogleError(page)) || "unusual_activity");
+  const deadline = Date.now() + config.navTimeoutMs;
+  while (Date.now() < deadline) {
+    if (new RegExp(config.workspaceUrlPattern).test(page.url())) {
+      return;
+    }
+    const consent = page.locator(config.consentButtonSelector).first();
+    if (await consent.isVisible().catch(() => false)) {
+      await consent.click().catch(() => {});
+    }
+    await page.waitForTimeout(500);
   }
+  throw new GoogleLoginError((await detectGoogleError(page)) || "unusual_activity");
 }
 
 export async function loginWithGoogle({ email, password }, config = GOOGLE_LOGIN_CONFIG) {
