@@ -52,6 +52,15 @@ const exportState = {
   data: null,
 };
 
+const icons = {
+  refresh: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>',
+  key: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="4.5"/><path d="M10.7 12.3 21 2"/><path d="m16 6 3 3"/><path d="m19 3 3 3"/></svg>',
+  copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>',
+  external: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>',
+  edit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>',
+  trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>',
+};
+
 els.loginForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   els.loginError.textContent = "";
@@ -175,14 +184,14 @@ function renderSummary() {
   const low = state.availability.filter((item) => item.reason === "quota_low").length;
   const errors = state.availability.filter((item) => ["error", "stale", "pending"].includes(item.reason)).length;
   const cards = [
-    ["Available", available],
-    ["Quota low", low],
-    ["Needs attention", errors],
+    ["Available", available, "ok"],
+    ["Quota low", low, "warning"],
+    ["Needs attention", errors, "critical"],
   ];
-  els.summaryGrid.replaceChildren(...cards.map(([label, value]) => {
+  els.summaryGrid.replaceChildren(...cards.map(([label, value, level]) => {
     const item = document.createElement("article");
-    item.className = "summary-item";
-    item.innerHTML = `<span>${label}</span><strong>${value}</strong>`;
+    item.className = `summary-item ${level}`;
+    item.innerHTML = `<span class="label">${label}</span><strong>${value}</strong>`;
     return item;
   }));
 }
@@ -192,11 +201,12 @@ function renderTable() {
   els.emptyState.hidden = state.accounts.length > 0;
   for (const quota of state.quota) {
     const availability = state.availability.find((item) => item.id === quota.id);
+    const id = escapeAttr(quota.id);
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td>
         <strong>${escapeHtml(quota.name)}</strong>
-        <span>${escapeHtml(quota.id)}</span>
+        <span class="sub">${escapeHtml(quota.id)}</span>
       </td>
       <td><code class="workspace-code">${escapeHtml(quota.workspaceId)}</code></td>
       ${windowCell(quota.windows?.rolling)}
@@ -205,12 +215,16 @@ function renderTable() {
       <td>${apiKeyCell(quota)}</td>
       <td>${statusPill(quota, availability)}</td>
       <td class="actions-cell">
-        <button class="icon-button" data-action="check" data-id="${escapeAttr(quota.id)}" title="Refresh">R</button>
-        <button class="icon-button" data-action="key-check" data-id="${escapeAttr(quota.id)}" title="Check API key">K</button>
-        <button class="icon-button" data-action="key-copy" data-id="${escapeAttr(quota.id)}" title="Copy API key">C</button>
-        <button class="icon-button wide" data-action="browser-open" data-id="${escapeAttr(quota.id)}" title="Open dashboard">Open</button>
-        <button class="icon-button" data-action="edit" data-id="${escapeAttr(quota.id)}" title="Edit">E</button>
-        <button class="icon-button danger" data-action="delete" data-id="${escapeAttr(quota.id)}" title="Delete">×</button>
+        <div class="row-actions">
+          <button class="icon-button" data-action="check" data-id="${id}" title="Refresh">${icons.refresh}</button>
+          <button class="icon-button" data-action="key-check" data-id="${id}" title="Check API key">${icons.key}</button>
+          <button class="icon-button" data-action="key-copy" data-id="${id}" title="Copy API key">${icons.copy}</button>
+          <span class="sep"></span>
+          <button class="icon-button wide" data-action="browser-open" data-id="${id}" title="Open dashboard">${icons.external}<span>Open</span></button>
+          <span class="sep"></span>
+          <button class="icon-button" data-action="edit" data-id="${id}" title="Edit">${icons.edit}</button>
+          <button class="icon-button danger" data-action="delete" data-id="${id}" title="Delete">${icons.trash}</button>
+        </div>
       </td>
     `;
     els.quotaRows.append(tr);
@@ -219,17 +233,17 @@ function renderTable() {
 
 function apiKeyCell(account) {
   if (account.apiKeyFound) {
-    return `<span class="pill ok">found</span><small class="mono">${escapeHtml(account.apiKeyMasked)}</small>`;
+    return `<span class="pill ok">found</span><span class="cell-detail mono">${escapeHtml(account.apiKeyMasked)}</span>`;
   }
   if (account.apiKeyError) {
-    return `<span class="pill critical">missing</span><small>${escapeHtml(account.apiKeyError)}</small>`;
+    return `<span class="pill critical">missing</span><span class="cell-detail">${escapeHtml(account.apiKeyError)}</span>`;
   }
-  return `<span class="pill">not checked</span><small>Use check key</small>`;
+  return `<span class="pill">not checked</span><span class="cell-detail">Use check key</span>`;
 }
 
 function windowCell(window) {
   if (!window) {
-    return `<td><span class="muted">Waiting</span></td>`;
+    return `<td class="quota-cell"><span class="cell-detail">Waiting</span></td>`;
   }
   const level = window.percentRemaining < 10 ? "critical" : window.percentRemaining < 25 ? "warning" : "ok";
   return `
@@ -241,7 +255,7 @@ function windowCell(window) {
         <strong>${formatPercent(window.percentRemaining)}</strong>
         <small>${formatReset(window.resetAt)}</small>
       </div>
-      <small>${formatMoney(window.remainingUsd)} / ${formatMoney(window.limitUsd)}</small>
+      <span class="quota-limit">${formatMoney(window.remainingUsd)} / ${formatMoney(window.limitUsd)}</span>
     </td>
   `;
 }
@@ -250,7 +264,9 @@ function statusPill(quota, availability) {
   const reason = availability?.reason || quota.status;
   const label = quota.stale ? "stale" : reason;
   const level = availability?.available ? "ok" : reason === "quota_low" ? "warning" : "critical";
-  const detail = quota.error ? `<small>${escapeHtml(quota.error)}</small>` : `<small>${quota.checkedAt ? formatDate(quota.checkedAt) : "Not checked"}</small>`;
+  const detail = quota.error
+    ? `<span class="cell-detail">${escapeHtml(quota.error)}</span>`
+    : `<span class="cell-detail">${quota.checkedAt ? formatDate(quota.checkedAt) : "Not checked"}</span>`;
   return `<span class="pill ${level}">${escapeHtml(label)}</span>${detail}`;
 }
 
