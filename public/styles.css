@@ -442,6 +442,23 @@ dialog h2 { margin: 0; font-size: var(--fs-lg); }
 
 .segment.active { color: var(--green-ink); background: var(--green); }
 
+/* ---------- Dialog tabs ---------- */
+.segmented.dialog-tabs {
+  display: flex;
+  width: calc(100% - 2 * var(--s-5));
+  margin: var(--s-3) var(--s-5) 0;
+}
+.segmented.dialog-tabs .segment { flex: 1 1 0; }
+
+.tab-panel { padding-bottom: var(--s-2); }
+
+.panel-note {
+  margin: var(--s-2) var(--s-5) 0;
+  font-size: var(--fs-sm);
+  color: var(--muted);
+}
+.panel-note code { color: var(--blue); font-size: var(--fs-xs); }
+
 .export-meta { margin: 0; color: var(--muted); font-size: var(--fs-base); }
 
 #exportText {

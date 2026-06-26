@@ -81,35 +81,65 @@
           <h2 id="dialogTitle">Аккаунт</h2>
           <button class="icon-button" value="cancel" type="submit" title="Закрыть">×</button>
         </header>
-        <input id="editingId" type="hidden" />
-        <label>
-          <span>ID</span>
-          <input id="accountId" required maxlength="80" placeholder="go-main" />
-        </label>
-        <label>
-          <span>Название</span>
-          <input id="accountName" required placeholder="Main Go" />
-        </label>
-        <label>
-          <span>Workspace ID</span>
-          <input id="workspaceId" required placeholder="workspace-id-from-url" />
-        </label>
-        <label>
-          <span>Cookie авторизации</span>
-          <input id="authCookie" type="password" autocomplete="off" placeholder="cookie авторизации" />
-        </label>
-        <label>
-          <span>Заметки</span>
-          <textarea id="notes" rows="3"></textarea>
-        </label>
-        <label class="checkbox-row">
-          <input id="enabled" type="checkbox" checked />
-          <span>Включён</span>
-        </label>
-        <p class="form-error" id="formError" role="alert"></p>
+
+        <div class="segmented dialog-tabs" id="dialogTabs" role="tablist" aria-label="Способ добавления" hidden>
+          <button class="segment active" type="button" data-tab="form" id="tabForm" role="tab">Auth cookie</button>
+          <button class="segment" type="button" data-tab="json" id="tabJson" role="tab">JSON</button>
+          <button class="segment" type="button" data-tab="google" id="tabGoogle" role="tab">Google</button>
+        </div>
+
+        <div class="tab-panel" id="panelForm" data-panel="form" role="tabpanel">
+          <input id="editingId" type="hidden" />
+          <label>
+            <span>ID</span>
+            <input id="accountId" required maxlength="80" placeholder="go-main" />
+          </label>
+          <label>
+            <span>Название</span>
+            <input id="accountName" required placeholder="Main Go" />
+          </label>
+          <label>
+            <span>Workspace ID</span>
+            <input id="workspaceId" required placeholder="workspace-id-from-url" />
+          </label>
+          <label>
+            <span>Cookie авторизации</span>
+            <input id="authCookie" type="password" autocomplete="off" placeholder="cookie авторизации" />
+          </label>
+          <label>
+            <span>Заметки</span>
+            <textarea id="notes" rows="3"></textarea>
+          </label>
+          <label class="checkbox-row">
+            <input id="enabled" type="checkbox" checked />
+            <span>Включён</span>
+          </label>
+          <p class="form-error" id="formError" role="alert"></p>
+        </div>
+
+        <div class="tab-panel" id="panelJson" data-panel="json" role="tabpanel" hidden>
+          <label>
+            <span>Аккаунты (JSON-массив)</span>
+            <textarea id="jsonAccounts" rows="10" spellcheck="false" placeholder='[{"id":"go-1","name":"Main","workspaceId":"wrk_xxx","authCookie":"cookie"}]'></textarea>
+          </label>
+          <p class="form-error" id="jsonError" role="alert"></p>
+        </div>
+
+        <div class="tab-panel" id="panelGoogle" data-panel="google" role="tabpanel" hidden>
+          <label>
+            <span>Аккаунты Google</span>
+            <textarea id="googleAccounts" rows="10" spellcheck="false" placeholder="email|password|2fa&#10;email|password|2fa"></textarea>
+          </label>
+          <p class="muted panel-note">Формат: каждая строка — <code>email|password|2fa</code>. Распознано: <strong id="googleCount">0</strong></p>
+          <p class="muted panel-note"><strong>Вход через Google скоро.</strong> Сейчас аккаунты не сохраняются.</p>
+          <p class="form-error" id="googleError" role="alert"></p>
+        </div>
+
         <footer>
           <button class="button subtle" value="cancel" type="submit">Отмена</button>
           <button class="button primary" id="saveAccountButton" type="button">Сохранить</button>
+          <button class="button primary" id="saveJsonButton" type="button" hidden>Добавить все</button>
+          <button class="button primary" id="saveGoogleButton" type="button" disabled title="Вход через Google скоро">Вход через Google скоро</button>
         </footer>
       </form>
     </dialog>

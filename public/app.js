@@ -36,6 +36,20 @@ const els = {
   enabled: document.querySelector("#enabled"),
   formError: document.querySelector("#formError"),
   saveAccountButton: document.querySelector("#saveAccountButton"),
+  dialogTabs: document.querySelector("#dialogTabs"),
+  tabForm: document.querySelector("#tabForm"),
+  tabJson: document.querySelector("#tabJson"),
+  tabGoogle: document.querySelector("#tabGoogle"),
+  panelForm: document.querySelector("#panelForm"),
+  panelJson: document.querySelector("#panelJson"),
+  panelGoogle: document.querySelector("#panelGoogle"),
+  jsonAccounts: document.querySelector("#jsonAccounts"),
+  jsonError: document.querySelector("#jsonError"),
+  saveJsonButton: document.querySelector("#saveJsonButton"),
+  googleAccounts: document.querySelector("#googleAccounts"),
+  googleCount: document.querySelector("#googleCount"),
+  googleError: document.querySelector("#googleError"),
+  saveGoogleButton: document.querySelector("#saveGoogleButton"),
   exportDialog: document.querySelector("#exportDialog"),
   closeExportButton: document.querySelector("#closeExportButton"),
   refreshExportButton: document.querySelector("#refreshExportButton"),
@@ -132,6 +146,11 @@ els.logoutButton.addEventListener("click", async () => {
   showLogin();
 });
 els.saveAccountButton.addEventListener("click", saveAccount);
+els.saveJsonButton.addEventListener("click", saveJsonAccounts);
+els.tabForm.addEventListener("click", () => setDialogTab("form"));
+els.tabJson.addEventListener("click", () => setDialogTab("json"));
+els.tabGoogle.addEventListener("click", () => setDialogTab("google"));
+els.googleAccounts.addEventListener("input", updateGoogleCount);
 
 document.addEventListener("click", async (event) => {
   const button = event.target.closest("button[data-action]");
@@ -305,6 +324,12 @@ function statusPill(quota, availability) {
 
 function openAccountDialog(account = null) {
   els.formError.textContent = "";
+  els.jsonError.textContent = "";
+  els.googleError.textContent = "";
+  els.jsonAccounts.value = "";
+  els.googleAccounts.value = "";
+  updateGoogleCount();
+
   els.dialogTitle.textContent = account ? "Изменить аккаунт" : "Добавить аккаунт";
   els.editingId.value = account?.id || "";
   els.accountId.value = account?.id || "";
@@ -316,7 +341,78 @@ function openAccountDialog(account = null) {
   els.authCookie.placeholder = account ? "Оставьте пустым, чтобы сохранить текущий cookie" : "cookie авторизации";
   els.notes.value = account?.notes || "";
   els.enabled.checked = account?.enabled ?? true;
+
+  els.dialogTabs.hidden = Boolean(account);
+  setDialogTab("form");
   els.dialog.showModal();
+}
+
+function setDialogTab(tab) {
+  const tabs = { form: els.tabForm, json: els.tabJson, google: els.tabGoogle };
+  const panels = { form: els.panelForm, json: els.panelJson, google: els.panelGoogle };
+  for (const [key, el] of Object.entries(tabs)) {
+    el.classList.toggle("active", key === tab);
+  }
+  for (const [key, el] of Object.entries(panels)) {
+    el.hidden = key !== tab;
+  }
+  els.saveAccountButton.hidden = tab !== "form";
+  els.saveJsonButton.hidden = tab !== "json";
+  els.saveGoogleButton.hidden = tab !== "google";
+  if (tab === "form") els.formError.textContent = "";
+  if (tab === "json") els.jsonError.textContent = "";
+  if (tab === "google") els.googleError.textContent = "";
+}
+
+async function saveJsonAccounts() {
+  els.jsonError.textContent = "";
+  let accounts;
+  try {
+    accounts = JSON.parse(els.jsonAccounts.value || "[]");
+  } catch (error) {
+    els.jsonError.textContent = `Невалидный JSON: ${error.message}`;
+    return;
+  }
+  if (!Array.isArray(accounts) || accounts.length === 0) {
+    els.jsonError.textContent = "Введите массив аккаунтов (один или больше).";
+    return;
+  }
+
+  setStatus("Добавляю аккаунты", "dirty");
+  const errors = [];
+  let created = 0;
+  for (let i = 0; i < accounts.length; i++) {
+    const item = accounts[i] || {};
+    const payload = {
+      id: String(item.id ?? "").trim() || undefined,
+      name: String(item.name ?? "").trim(),
+      workspaceId: String(item.workspaceId ?? "").trim(),
+      authCookie: String(item.authCookie ?? "").trim(),
+      enabled: item.enabled === undefined ? true : Boolean(item.enabled),
+      notes: String(item.notes ?? "").trim(),
+    };
+    try {
+      await api("/api/accounts", { method: "POST", body: JSON.stringify(payload) });
+      created++;
+    } catch (error) {
+      errors.push(`#${i + 1} ${item.id || item.name || "?"}: ${error.message}`);
+    }
+  }
+  await loadAll().catch(() => null);
+
+  if (errors.length) {
+    els.jsonError.textContent = `Создано ${created}/${accounts.length}. Ошибки: ${errors.join("; ")}`;
+    setStatus(`Создано ${created}/${accounts.length}`, errors.length === accounts.length ? "error" : "dirty");
+    return;
+  }
+  els.dialog.close();
+  setStatus(`Добавлено аккаунтов: ${created}`, "saved");
+}
+
+function updateGoogleCount() {
+  const lines = els.googleAccounts.value.split("\n").map((line) => line.trim()).filter(Boolean);
+  const valid = lines.filter((line) => line.split("|").map((part) => part.trim()).filter(Boolean).length >= 2).length;
+  els.googleCount.textContent = String(valid);
 }
 
 async function saveAccount() {
