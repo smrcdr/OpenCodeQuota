@@ -49,7 +49,7 @@ const els = {
   googleAccounts: document.querySelector("#googleAccounts"),
   googleCount: document.querySelector("#googleCount"),
   googleError: document.querySelector("#googleError"),
-  saveGoogleButton: document.querySelector("#saveGoogleButton"),
+  googleList: document.querySelector("#googleList"),
   exportDialog: document.querySelector("#exportDialog"),
   closeExportButton: document.querySelector("#closeExportButton"),
   refreshExportButton: document.querySelector("#refreshExportButton"),
@@ -65,6 +65,8 @@ const exportState = {
   format: "json",
   data: null,
 };
+
+const googleRows = {};
 
 const icons = {
   refresh: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>',
@@ -150,9 +152,18 @@ els.saveJsonButton.addEventListener("click", saveJsonAccounts);
 els.tabForm.addEventListener("click", () => setDialogTab("form"));
 els.tabJson.addEventListener("click", () => setDialogTab("json"));
 els.tabGoogle.addEventListener("click", () => setDialogTab("google"));
-els.googleAccounts.addEventListener("input", updateGoogleCount);
+els.googleAccounts.addEventListener("input", () => {
+  updateGoogleCount();
+  syncGoogleRows();
+  renderGoogleList();
+});
 
 document.addEventListener("click", async (event) => {
+  const googleButton = event.target.closest("button[data-google-login]");
+  if (googleButton) {
+    await loginGoogleAccount(googleButton.dataset.googleLogin);
+    return;
+  }
   const button = event.target.closest("button[data-action]");
   if (!button) {
     return;
@@ -328,7 +339,11 @@ function openAccountDialog(account = null) {
   els.googleError.textContent = "";
   els.jsonAccounts.value = "";
   els.googleAccounts.value = "";
+  for (const key of Object.keys(googleRows)) {
+    delete googleRows[key];
+  }
   updateGoogleCount();
+  renderGoogleList();
 
   els.dialogTitle.textContent = account ? "Изменить аккаунт" : "Добавить аккаунт";
   els.editingId.value = account?.id || "";
@@ -358,7 +373,6 @@ function setDialogTab(tab) {
   }
   els.saveAccountButton.hidden = tab !== "form";
   els.saveJsonButton.hidden = tab !== "json";
-  els.saveGoogleButton.hidden = tab !== "google";
   if (tab === "form") els.formError.textContent = "";
   if (tab === "json") els.jsonError.textContent = "";
   if (tab === "google") els.googleError.textContent = "";
@@ -413,6 +427,97 @@ function updateGoogleCount() {
   const lines = els.googleAccounts.value.split("\n").map((line) => line.trim()).filter(Boolean);
   const valid = lines.filter((line) => line.split("|").map((part) => part.trim()).filter(Boolean).length >= 2).length;
   els.googleCount.textContent = String(valid);
+}
+
+function parseGoogleAccounts() {
+  return els.googleAccounts.value
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const [email, ...rest] = line.split("|").map((part) => part.trim());
+      return { email, password: rest.join("|") };
+    })
+    .filter((item) => item.email && item.password);
+}
+
+function syncGoogleRows() {
+  const parsed = parseGoogleAccounts();
+  const seen = new Set(parsed.map((item) => item.email));
+  for (const key of Object.keys(googleRows)) {
+    if (!seen.has(key)) {
+      delete googleRows[key];
+    }
+  }
+  for (const { email, password } of parsed) {
+    if (!googleRows[email]) {
+      googleRows[email] = { password, status: "idle", message: "" };
+    } else {
+      googleRows[email].password = password;
+    }
+  }
+}
+
+function googleStatusText(row) {
+  if (!row) {
+    return "";
+  }
+  if (row.status === "loading") {
+    return "входим…";
+  }
+  if (row.status === "ok") {
+    return "✓ добавлен";
+  }
+  if (row.status === "error") {
+    return row.message || "ошибка";
+  }
+  return "";
+}
+
+function renderGoogleList() {
+  const parsed = parseGoogleAccounts();
+  els.googleList.replaceChildren();
+  if (parsed.length === 0) {
+    return;
+  }
+  for (const { email } of parsed) {
+    const row = googleRows[email] || { status: "idle", message: "" };
+    const statusClass = row.status === "idle" ? "" : ` google-status--${row.status}`;
+    const item = document.createElement("div");
+    item.className = "google-row";
+    item.innerHTML = `
+      <span class="google-email" title="${escapeAttr(email)}">${escapeHtml(email)}</span>
+      <span class="google-status${statusClass}">${escapeHtml(googleStatusText(row))}</span>
+      <button class="button google-login-button" data-google-login="${escapeAttr(email)}" type="button" ${row.status === "loading" ? "disabled" : ""}>Войти через Google</button>
+    `;
+    els.googleList.append(item);
+  }
+}
+
+async function loginGoogleAccount(email) {
+  const row = googleRows[email];
+  if (!row || row.status === "loading") {
+    return;
+  }
+  row.status = "loading";
+  row.message = "";
+  renderGoogleList();
+  setStatus("Вхожу через Google", "dirty");
+  try {
+    const result = await api("/api/google-login", {
+      method: "POST",
+      body: JSON.stringify({ email, password: row.password }),
+    });
+    row.status = "ok";
+    row.message = "";
+    await loadAll();
+    setStatus(`Добавлен аккаунт ${result.account?.name || email}`, "saved");
+  } catch (error) {
+    row.status = "error";
+    row.message = error.message;
+    setStatus(error.message, "error");
+  }
+  renderGoogleList();
 }
 
 async function saveAccount() {

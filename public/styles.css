@@ -459,6 +459,34 @@ dialog h2 { margin: 0; font-size: var(--fs-lg); }
 }
 .panel-note code { color: var(--blue); font-size: var(--fs-xs); }
 
+.google-list {
+  display: grid;
+  gap: var(--s-2);
+  padding: var(--s-2) var(--s-5) 0;
+}
+.google-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  padding: var(--s-2) var(--s-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #0b0e10;
+}
+.google-email {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-sm);
+}
+.google-status { font-size: var(--fs-xs); color: var(--muted); min-width: 0; }
+.google-status--ok { color: var(--green); }
+.google-status--error { color: var(--red); }
+.google-status--loading { color: var(--amber); }
+.google-login-button { min-height: 32px; padding: 0 var(--s-3); font-size: var(--fs-xs); flex: 0 0 auto; }
+
 .export-meta { margin: 0; color: var(--muted); font-size: var(--fs-base); }
 
 #exportText {

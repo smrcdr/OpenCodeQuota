@@ -128,10 +128,11 @@
         <div class="tab-panel" id="panelGoogle" data-panel="google" role="tabpanel" hidden>
           <label>
             <span>Аккаунты Google</span>
-            <textarea id="googleAccounts" rows="10" spellcheck="false" placeholder="email|password|2fa&#10;email|password|2fa"></textarea>
+            <textarea id="googleAccounts" rows="7" spellcheck="false" placeholder="email|password&#10;email|password"></textarea>
           </label>
-          <p class="muted panel-note">Формат: каждая строка — <code>email|password|2fa</code>. Распознано: <strong id="googleCount">0</strong></p>
-          <p class="muted panel-note"><strong>Вход через Google скоро.</strong> Сейчас аккаунты не сохраняются.</p>
+          <p class="muted panel-note">Формат: каждая строка — <code>email|password</code>. Распознано: <strong id="googleCount">0</strong>. Вход по одному аккаунту.</p>
+          <div class="google-list" id="googleList" aria-live="polite"></div>
+          <p class="muted panel-note">URL и селекторы настраиваются в <code>src/google-login.js</code> (<code>GOOGLE_LOGIN_CONFIG</code>).</p>
           <p class="form-error" id="googleError" role="alert"></p>
         </div>
 
@@ -139,7 +140,6 @@
           <button class="button subtle" value="cancel" type="submit">Отмена</button>
           <button class="button primary" id="saveAccountButton" type="button">Сохранить</button>
           <button class="button primary" id="saveJsonButton" type="button" hidden>Добавить все</button>
-          <button class="button primary" id="saveGoogleButton" type="button" disabled title="Вход через Google скоро">Вход через Google скоро</button>
         </footer>
       </form>
     </dialog>
