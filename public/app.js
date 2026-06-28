@@ -36,6 +36,21 @@ const els = {
   enabled: document.querySelector("#enabled"),
   formError: document.querySelector("#formError"),
   saveAccountButton: document.querySelector("#saveAccountButton"),
+  dialogTabs: document.querySelector("#dialogTabs"),
+  tabForm: document.querySelector("#tabForm"),
+  tabJson: document.querySelector("#tabJson"),
+  tabGoogle: document.querySelector("#tabGoogle"),
+  panelForm: document.querySelector("#panelForm"),
+  panelJson: document.querySelector("#panelJson"),
+  panelGoogle: document.querySelector("#panelGoogle"),
+  jsonAccounts: document.querySelector("#jsonAccounts"),
+  jsonError: document.querySelector("#jsonError"),
+  saveJsonButton: document.querySelector("#saveJsonButton"),
+  googleAccounts: document.querySelector("#googleAccounts"),
+  googleCount: document.querySelector("#googleCount"),
+  googleError: document.querySelector("#googleError"),
+  googleList: document.querySelector("#googleList"),
+  loginAllGoogleButton: document.querySelector("#loginAllGoogleButton"),
   exportDialog: document.querySelector("#exportDialog"),
   closeExportButton: document.querySelector("#closeExportButton"),
   refreshExportButton: document.querySelector("#refreshExportButton"),
@@ -51,6 +66,51 @@ const exportState = {
   format: "json",
   data: null,
 };
+
+const googleRows = {};
+let googleBatchRunning = false;
+
+const icons = {
+  refresh: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>',
+  key: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="4.5"/><path d="M10.7 12.3 21 2"/><path d="m16 6 3 3"/><path d="m19 3 3 3"/></svg>',
+  copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>',
+  external: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>',
+  edit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>',
+  trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>',
+};
+
+const REASON_LABELS = {
+  ok: "ок",
+  available: "доступен",
+  error: "ошибка",
+  pending: "ожидание",
+  disabled: "отключён",
+  stale: "устарел",
+  quota_low: "мало квоты",
+};
+
+const ERROR_LABELS = {
+  api_key_not_found: "ключ не найден",
+  account_disabled: "аккаунт отключён",
+};
+
+function reasonLabel(value) {
+  return REASON_LABELS[value] || value;
+}
+
+function errorLabel(value) {
+  if (!value) return value;
+  return ERROR_LABELS[value] || value;
+}
+
+function pluralRu(n, one, few, many) {
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  if (mod10 === 1 && mod100 !== 11) return `${n} ${one}`;
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return `${n} ${few}`;
+  return `${n} ${many}`;
+}
+
 
 els.loginForm.addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -90,8 +150,25 @@ els.logoutButton.addEventListener("click", async () => {
   showLogin();
 });
 els.saveAccountButton.addEventListener("click", saveAccount);
+els.saveJsonButton.addEventListener("click", saveJsonAccounts);
+els.loginAllGoogleButton.addEventListener("click", loginAllGoogleAccounts);
+els.tabForm.addEventListener("click", () => setDialogTab("form"));
+els.tabJson.addEventListener("click", () => setDialogTab("json"));
+els.tabGoogle.addEventListener("click", () => setDialogTab("google"));
+els.googleAccounts.addEventListener("input", () => {
+  updateGoogleCount();
+  syncGoogleRows();
+  renderGoogleList();
+});
 
 document.addEventListener("click", async (event) => {
+  const googleButton = event.target.closest("button[data-google-login]");
+  if (googleButton) {
+    if (!googleBatchRunning) {
+      await loginGoogleAccount(googleButton.dataset.googleLogin);
+    }
+    return;
+  }
   const button = event.target.closest("button[data-action]");
   if (!button) {
     return;
@@ -120,7 +197,7 @@ document.addEventListener("click", async (event) => {
   }
   if (action === "delete") {
     const account = state.accounts.find((item) => item.id === id);
-    if (!confirm(`Delete ${account?.name || id}?`)) {
+    if (!confirm(`Удалить ${account?.name || id}?`)) {
       return;
     }
     await withStatus("Удаляю", async () => {
@@ -164,10 +241,10 @@ async function loadAll() {
 function render() {
   renderSummary();
   renderTable();
-  els.accountCount.textContent = plural(state.accounts.length, "account", "accounts");
+  els.accountCount.textContent = pluralRu(state.accounts.length, "аккаунт", "аккаунта", "аккаунтов");
   els.healthText.textContent = state.health?.newestCheckAgeSeconds === null
-    ? "No checks yet"
-    : `Last check ${formatAge(state.health.newestCheckAgeSeconds)} ago`;
+    ? "Проверок ещё нет"
+    : `Последняя проверка ${formatAge(state.health.newestCheckAgeSeconds)} назад`;
 }
 
 function renderSummary() {
@@ -175,14 +252,14 @@ function renderSummary() {
   const low = state.availability.filter((item) => item.reason === "quota_low").length;
   const errors = state.availability.filter((item) => ["error", "stale", "pending"].includes(item.reason)).length;
   const cards = [
-    ["Available", available],
-    ["Quota low", low],
-    ["Needs attention", errors],
+    ["Доступно", available, "ok"],
+    ["Мало квоты", low, "warning"],
+    ["Требует внимания", errors, "critical"],
   ];
-  els.summaryGrid.replaceChildren(...cards.map(([label, value]) => {
+  els.summaryGrid.replaceChildren(...cards.map(([label, value, level]) => {
     const item = document.createElement("article");
-    item.className = "summary-item";
-    item.innerHTML = `<span>${label}</span><strong>${value}</strong>`;
+    item.className = `summary-item ${level}`;
+    item.innerHTML = `<span class="label">${label}</span><strong>${value}</strong>`;
     return item;
   }));
 }
@@ -192,11 +269,12 @@ function renderTable() {
   els.emptyState.hidden = state.accounts.length > 0;
   for (const quota of state.quota) {
     const availability = state.availability.find((item) => item.id === quota.id);
+    const id = escapeAttr(quota.id);
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td>
         <strong>${escapeHtml(quota.name)}</strong>
-        <span>${escapeHtml(quota.id)}</span>
+        <span class="sub">${escapeHtml(quota.id)}</span>
       </td>
       <td><code class="workspace-code">${escapeHtml(quota.workspaceId)}</code></td>
       ${windowCell(quota.windows?.rolling)}
@@ -205,12 +283,14 @@ function renderTable() {
       <td>${apiKeyCell(quota)}</td>
       <td>${statusPill(quota, availability)}</td>
       <td class="actions-cell">
-        <button class="icon-button" data-action="check" data-id="${escapeAttr(quota.id)}" title="Refresh">R</button>
-        <button class="icon-button" data-action="key-check" data-id="${escapeAttr(quota.id)}" title="Check API key">K</button>
-        <button class="icon-button" data-action="key-copy" data-id="${escapeAttr(quota.id)}" title="Copy API key">C</button>
-        <button class="icon-button wide" data-action="browser-open" data-id="${escapeAttr(quota.id)}" title="Open dashboard">Open</button>
-        <button class="icon-button" data-action="edit" data-id="${escapeAttr(quota.id)}" title="Edit">E</button>
-        <button class="icon-button danger" data-action="delete" data-id="${escapeAttr(quota.id)}" title="Delete">×</button>
+        <div class="row-actions">
+          <button class="icon-button" data-action="check" data-id="${id}" title="Обновить">${icons.refresh}</button>
+          <button class="icon-button" data-action="key-check" data-id="${id}" title="Проверить API-ключ">${icons.key}</button>
+          <button class="icon-button" data-action="key-copy" data-id="${id}" title="Копировать API-ключ">${icons.copy}</button>
+          <button class="icon-button" data-action="browser-open" data-id="${id}" title="Открыть дашборд">${icons.external}</button>
+          <button class="icon-button" data-action="edit" data-id="${id}" title="Изменить">${icons.edit}</button>
+          <button class="icon-button danger" data-action="delete" data-id="${id}" title="Удалить">${icons.trash}</button>
+        </div>
       </td>
     `;
     els.quotaRows.append(tr);
@@ -219,44 +299,59 @@ function renderTable() {
 
 function apiKeyCell(account) {
   if (account.apiKeyFound) {
-    return `<span class="pill ok">found</span><small class="mono">${escapeHtml(account.apiKeyMasked)}</small>`;
+    return `<span class="pill ok">найден</span><span class="cell-detail mono">${escapeHtml(account.apiKeyMasked)}</span>`;
   }
   if (account.apiKeyError) {
-    return `<span class="pill critical">missing</span><small>${escapeHtml(account.apiKeyError)}</small>`;
+    return `<span class="pill critical">отсутствует</span><span class="cell-detail">${escapeHtml(errorLabel(account.apiKeyError))}</span>`;
   }
-  return `<span class="pill">not checked</span><small>Use check key</small>`;
+  return `<span class="pill">не проверен</span><span class="cell-detail">Проверьте ключ</span>`;
 }
 
 function windowCell(window) {
   if (!window) {
-    return `<td><span class="muted">Waiting</span></td>`;
+    return `<td class="quota-cell"><span class="cell-detail">Ожидание</span></td>`;
   }
-  const level = window.percentRemaining < 10 ? "critical" : window.percentRemaining < 25 ? "warning" : "ok";
+  const color = quotaColor(window.percentRemaining);
   return `
     <td class="quota-cell">
-      <div class="meter ${level}">
-        <span style="width:${window.percentRemaining}%"></span>
+      <div class="meter">
+        <span style="width:${window.percentRemaining}%; background:${color}"></span>
       </div>
       <div class="quota-line">
         <strong>${formatPercent(window.percentRemaining)}</strong>
         <small>${formatReset(window.resetAt)}</small>
       </div>
-      <small>${formatMoney(window.remainingUsd)} / ${formatMoney(window.limitUsd)}</small>
+      <span class="quota-limit">${formatMoney(window.remainingUsd)} / ${formatMoney(window.limitUsd)}</span>
     </td>
   `;
 }
 
 function statusPill(quota, availability) {
   const reason = availability?.reason || quota.status;
-  const label = quota.stale ? "stale" : reason;
+  const label = reasonLabel(quota.stale ? "stale" : reason);
   const level = availability?.available ? "ok" : reason === "quota_low" ? "warning" : "critical";
-  const detail = quota.error ? `<small>${escapeHtml(quota.error)}</small>` : `<small>${quota.checkedAt ? formatDate(quota.checkedAt) : "Not checked"}</small>`;
+  const detail = quota.error
+    ? `<span class="cell-detail">${escapeHtml(errorLabel(quota.error))}</span>`
+    : `<span class="cell-detail">${quota.checkedAt ? formatDate(quota.checkedAt) : "Не проверен"}</span>`;
   return `<span class="pill ${level}">${escapeHtml(label)}</span>${detail}`;
 }
 
 function openAccountDialog(account = null) {
   els.formError.textContent = "";
-  els.dialogTitle.textContent = account ? "Edit account" : "Add account";
+  els.jsonError.textContent = "";
+  els.googleError.textContent = "";
+  els.jsonAccounts.value = "";
+  els.googleAccounts.value = "";
+  for (const key of Object.keys(googleRows)) {
+    delete googleRows[key];
+  }
+  googleBatchRunning = false;
+  els.loginAllGoogleButton.disabled = false;
+  els.loginAllGoogleButton.textContent = "Войти во все";
+  updateGoogleCount();
+  renderGoogleList();
+
+  els.dialogTitle.textContent = account ? "Изменить аккаунт" : "Добавить аккаунт";
   els.editingId.value = account?.id || "";
   els.accountId.value = account?.id || "";
   els.accountId.disabled = Boolean(account);
@@ -264,10 +359,238 @@ function openAccountDialog(account = null) {
   els.workspaceId.value = account?.workspaceId || "";
   els.authCookie.value = "";
   els.authCookie.required = !account;
-  els.authCookie.placeholder = account ? "Leave empty to keep current cookie" : "auth cookie";
+  els.authCookie.placeholder = account ? "Оставьте пустым, чтобы сохранить текущий cookie" : "cookie авторизации";
   els.notes.value = account?.notes || "";
   els.enabled.checked = account?.enabled ?? true;
+
+  els.dialogTabs.hidden = Boolean(account);
+  setDialogTab("form");
   els.dialog.showModal();
+}
+
+function setDialogTab(tab) {
+  const tabs = { form: els.tabForm, json: els.tabJson, google: els.tabGoogle };
+  const panels = { form: els.panelForm, json: els.panelJson, google: els.panelGoogle };
+  for (const [key, el] of Object.entries(tabs)) {
+    el.classList.toggle("active", key === tab);
+  }
+  for (const [key, el] of Object.entries(panels)) {
+    el.hidden = key !== tab;
+  }
+  els.saveAccountButton.hidden = tab !== "form";
+  els.saveJsonButton.hidden = tab !== "json";
+  els.loginAllGoogleButton.hidden = tab !== "google";
+  if (tab === "form") els.formError.textContent = "";
+  if (tab === "json") els.jsonError.textContent = "";
+  if (tab === "google") els.googleError.textContent = "";
+}
+
+async function saveJsonAccounts() {
+  els.jsonError.textContent = "";
+  let accounts;
+  try {
+    accounts = JSON.parse(els.jsonAccounts.value || "[]");
+  } catch (error) {
+    els.jsonError.textContent = `Невалидный JSON: ${error.message}`;
+    return;
+  }
+  if (!Array.isArray(accounts) || accounts.length === 0) {
+    els.jsonError.textContent = "Введите массив аккаунтов (один или больше).";
+    return;
+  }
+
+  setStatus("Добавляю аккаунты", "dirty");
+  const errors = [];
+  let created = 0;
+  for (let i = 0; i < accounts.length; i++) {
+    const item = accounts[i] || {};
+    const payload = {
+      id: String(item.id ?? "").trim() || undefined,
+      name: String(item.name ?? "").trim(),
+      workspaceId: String(item.workspaceId ?? "").trim(),
+      authCookie: String(item.authCookie ?? "").trim(),
+      enabled: item.enabled === undefined ? true : Boolean(item.enabled),
+      notes: String(item.notes ?? "").trim(),
+    };
+    try {
+      await api("/api/accounts", { method: "POST", body: JSON.stringify(payload) });
+      created++;
+    } catch (error) {
+      errors.push(`#${i + 1} ${item.id || item.name || "?"}: ${error.message}`);
+    }
+  }
+  await loadAll().catch(() => null);
+
+  if (errors.length) {
+    els.jsonError.textContent = `Создано ${created}/${accounts.length}. Ошибки: ${errors.join("; ")}`;
+    setStatus(`Создано ${created}/${accounts.length}`, errors.length === accounts.length ? "error" : "dirty");
+    return;
+  }
+  els.dialog.close();
+  setStatus(`Добавлено аккаунтов: ${created}`, "saved");
+}
+
+function updateGoogleCount() {
+  els.googleCount.textContent = String(parseGoogleAccounts().length);
+}
+
+function parseGoogleAccounts() {
+  const seen = new Set();
+  const result = [];
+  for (const line of els.googleAccounts.value.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      continue;
+    }
+    const [email, ...rest] = trimmed.split("|").map((part) => part.trim());
+    const password = rest.join("|");
+    if (!email || !password || seen.has(email)) {
+      continue;
+    }
+    seen.add(email);
+    result.push({ email, password });
+  }
+  return result;
+}
+
+function syncGoogleRows() {
+  const parsed = parseGoogleAccounts();
+  const seen = new Set(parsed.map((item) => item.email));
+  for (const key of Object.keys(googleRows)) {
+    if (!seen.has(key)) {
+      delete googleRows[key];
+    }
+  }
+  for (const { email, password } of parsed) {
+    if (!googleRows[email]) {
+      googleRows[email] = { password, status: "idle", message: "" };
+    } else {
+      googleRows[email].password = password;
+    }
+  }
+}
+
+function googleStatusText(row) {
+  if (!row) {
+    return "";
+  }
+  if (row.status === "loading") {
+    return "входим…";
+  }
+  if (row.status === "ok") {
+    return "✓ добавлен";
+  }
+  if (row.status === "error") {
+    return row.message || "ошибка";
+  }
+  return "";
+}
+
+function renderGoogleList() {
+  const parsed = parseGoogleAccounts();
+  els.googleList.replaceChildren();
+  if (parsed.length === 0) {
+    return;
+  }
+  for (const { email } of parsed) {
+    const row = googleRows[email] || { status: "idle", message: "" };
+    const statusClass = row.status === "idle" ? "" : ` google-status--${row.status}`;
+    const item = document.createElement("div");
+    item.className = "google-row";
+    item.innerHTML = `
+      <span class="google-email" title="${escapeAttr(email)}">${escapeHtml(email)}</span>
+      <span class="google-status${statusClass}">${escapeHtml(googleStatusText(row))}</span>
+      <button class="button google-login-button" data-google-login="${escapeAttr(email)}" type="button" ${row.status === "loading" ? "disabled" : ""}>Войти через Google</button>
+    `;
+    els.googleList.append(item);
+  }
+}
+
+async function loginGoogleAccount(email) {
+  const row = googleRows[email];
+  if (!row || row.status === "loading") {
+    return;
+  }
+  row.status = "loading";
+  row.message = "";
+  renderGoogleList();
+  setStatus("Вхожу через Google", "dirty");
+  try {
+    const result = await api("/api/google-login", {
+      method: "POST",
+      body: JSON.stringify({ email, password: row.password }),
+    });
+    row.status = "ok";
+    row.message = "";
+    await loadAll();
+    setStatus(`Добавлен аккаунт ${result.account?.name || email}`, "saved");
+  } catch (error) {
+    row.status = "error";
+    row.message = error.message;
+    setStatus(error.message, "error");
+  }
+  renderGoogleList();
+}
+
+async function loginAllGoogleAccounts() {
+  if (googleBatchRunning) {
+    return;
+  }
+  const accounts = parseGoogleAccounts()
+    .filter((item) => {
+      const row = googleRows[item.email];
+      return row && row.status !== "ok" && row.status !== "loading";
+    })
+    .map((item) => ({ email: item.email, password: item.password }));
+  if (accounts.length === 0) {
+    setStatus("Нет аккаунтов для входа", "dirty");
+    return;
+  }
+  googleBatchRunning = true;
+  els.loginAllGoogleButton.disabled = true;
+  els.loginAllGoogleButton.textContent = `Входим… (${accounts.length})`;
+  for (const { email } of accounts) {
+    if (googleRows[email]) {
+      googleRows[email].status = "loading";
+      googleRows[email].message = "";
+    }
+  }
+  renderGoogleList();
+  setStatus(`Входим во все (${accounts.length})…`, "dirty");
+  try {
+    const data = await api("/api/google-login-all", {
+      method: "POST",
+      body: JSON.stringify({ accounts }),
+    });
+    for (const r of data.results) {
+      const row = googleRows[r.email];
+      if (!row) {
+        continue;
+      }
+      if (r.ok) {
+        row.status = "ok";
+        row.message = "";
+      } else {
+        row.status = "error";
+        row.message = r.message || r.code || "ошибка";
+      }
+    }
+    await loadAll();
+    const ok = data.results.filter((r) => r.ok).length;
+    setStatus(`Готово: ${ok}/${data.results.length}`, ok === data.results.length ? "saved" : "dirty");
+  } catch (error) {
+    for (const { email } of accounts) {
+      if (googleRows[email]?.status === "loading") {
+        googleRows[email].status = "error";
+        googleRows[email].message = error.message;
+      }
+    }
+    setStatus(error.message, "error");
+  }
+  googleBatchRunning = false;
+  els.loginAllGoogleButton.disabled = false;
+  els.loginAllGoogleButton.textContent = "Войти во все";
+  renderGoogleList();
 }
 
 async function saveAccount() {
@@ -320,7 +643,7 @@ async function copyBestApiKey() {
 async function openAccountBrowser(id) {
   await withStatus("Открываю Chrome", async () => {
     const result = await api(`/api/accounts/${encodeURIComponent(id)}/browser/open`, { method: "POST" });
-    setStatus(`Chrome opened: ${result.session.accountName || result.session.accountId}`, "saved");
+    setStatus(`Chrome открыт: ${result.session.accountName || result.session.accountId}`, "saved");
   });
 }
 
@@ -348,15 +671,15 @@ function renderExportDialog() {
   els.exportKeysTab.classList.toggle("active", exportState.format === "keys");
 
   if (!exportState.data) {
-    els.exportMeta.textContent = "No export loaded";
+    els.exportMeta.textContent = "Экспорт не загружен";
     els.exportText.value = "";
     return;
   }
 
   const keys = exportState.data.accounts.map((item) => item.apiKey).filter(Boolean);
   els.exportMeta.textContent = exportState.format === "json"
-    ? `Full export: ${exportState.data.found}/${exportState.data.count} keys found`
-    : `9router import list: ${keys.length} keys, one per line`;
+    ? `Полный экспорт: найдено ${exportState.data.found}/${exportState.data.count}`
+    : `Список импорта 9router: ${pluralRu(keys.length, "ключ", "ключа", "ключей")}, по одному в строке`;
   els.exportText.value = exportState.format === "json"
     ? JSON.stringify(exportState.data, null, 2) + "\n"
     : keys.join("\n") + (keys.length ? "\n" : "");
@@ -393,10 +716,10 @@ function downloadText(filename, value, type) {
 
 async function copyToClipboard(value) {
   if (!value) {
-    throw new Error("API key is empty");
+    throw new Error("API-ключ пуст");
   }
   if (!navigator.clipboard?.writeText) {
-    throw new Error("Clipboard API is unavailable");
+    throw new Error("Clipboard API недоступен");
   }
   await navigator.clipboard.writeText(value);
 }
@@ -456,6 +779,11 @@ function formatPercent(value) {
   return `${Math.round(value)}%`;
 }
 
+function quotaColor(percent) {
+  const pct = Math.max(0, Math.min(100, percent));
+  return `hsl(${(pct / 100) * 120}, 72%, 52%)`;
+}
+
 function formatMoney(value) {
   return `$${Number(value || 0).toFixed(2)}`;
 }
@@ -463,25 +791,21 @@ function formatMoney(value) {
 function formatReset(value) {
   const time = Date.parse(value);
   if (!Number.isFinite(time)) {
-    return "no reset";
+    return "без сброса";
   }
   const seconds = Math.max(0, Math.round((time - Date.now()) / 1000));
-  return `resets in ${formatAge(seconds)}`;
+  return `сброс через ${formatAge(seconds)}`;
 }
 
 function formatAge(seconds) {
-  if (seconds < 60) return `${seconds}s`;
-  if (seconds < 3600) return `${Math.round(seconds / 60)}m`;
-  if (seconds < 86400) return `${Math.round(seconds / 3600)}h`;
-  return `${Math.round(seconds / 86400)}d`;
+  if (seconds < 60) return `${seconds}с`;
+  if (seconds < 3600) return `${Math.round(seconds / 60)}м`;
+  if (seconds < 86400) return `${Math.round(seconds / 3600)}ч`;
+  return `${Math.round(seconds / 86400)}д`;
 }
 
 function formatDate(value) {
-  return new Date(value).toLocaleString();
-}
-
-function plural(value, singular, pluralValue) {
-  return `${value} ${value === 1 ? singular : pluralValue}`;
+  return new Date(value).toLocaleString("ru-RU");
 }
 
 function escapeHtml(value) {
