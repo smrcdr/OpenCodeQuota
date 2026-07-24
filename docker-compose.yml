@@ -6,6 +6,7 @@ services:
     image: opencode-quota
     container_name: opencode-quota
     restart: unless-stopped
+    user: "${APP_UID:-1000}:${APP_GID:-1000}"
     env_file:
       - .env
     environment:
@@ -34,4 +35,3 @@ networks:
   edge:
     external: true
     name: smartapi-edge
-

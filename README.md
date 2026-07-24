@@ -28,6 +28,10 @@ docker network create smartapi-edge 2>/dev/null || true
 docker compose --env-file .env up -d --build
 ```
 
+Set `APP_UID=$(id -u)` and `APP_GID=$(id -g)` in `.env` so the non-root
+container process can read `config/accounts.json` and write the bind-mounted
+`data` directory without weakening their host permissions.
+
 `ADMIN_TOKEN` is required by the compose stack. The host port is bound to
 `127.0.0.1:40129`; other containers use `http://opencode-quota:40129`.
 
