@@ -109,12 +109,12 @@ async function handleApi(req, res, url, ctx) {
     return sendJson(res, 200, { ok: true });
   }
 
-  if (req.method === "GET" && url.pathname === "/api/availability") {
-    return sendJson(res, 200, { accounts: ctx.quotaState.listAvailability() });
-  }
-
   if (!isAdminAuthorized(req, ctx.settings.adminToken)) {
     return sendJson(res, 401, { error: { message: "Admin token required", type: "unauthorized" } });
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/availability") {
+    return sendJson(res, 200, { accounts: ctx.quotaState.listAvailability() });
   }
 
   if (req.method === "GET" && url.pathname === "/api/accounts") {
@@ -427,7 +427,7 @@ function buildHealth({ accounts, scheduler, quotaState }) {
 
 function isAdminAuthorized(req, adminToken) {
   if (!adminToken) {
-    return true;
+    return false;
   }
 
   const authorization = String(req.headers.authorization || "");
@@ -439,7 +439,7 @@ function isAdminAuthorized(req, adminToken) {
 }
 
 function isValidAdminToken(token, adminToken) {
-  return !adminToken || token === adminToken;
+  return Boolean(adminToken) && token === adminToken;
 }
 
 function isRevealAuthorized(req, adminToken) {

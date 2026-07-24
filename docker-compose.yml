@@ -1,0 +1,37 @@
+name: opencode-quota
+
+services:
+  quota:
+    build: .
+    image: opencode-quota
+    container_name: opencode-quota
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      HOST: "0.0.0.0"
+      PORT: "40129"
+      ADMIN_TOKEN: "${ADMIN_TOKEN:?ADMIN_TOKEN is required}"
+    networks:
+      - edge
+    ports:
+      - "127.0.0.1:40129:40129"
+    volumes:
+      - ./config:/app/config
+      - ./data:/app/data
+    healthcheck:
+      test:
+        - "CMD"
+        - "bun"
+        - "-e"
+        - "fetch('http://127.0.0.1:40129/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 8s
+
+networks:
+  edge:
+    external: true
+    name: smartapi-edge
+

@@ -52,7 +52,7 @@ test("availability marks account unavailable when quota is low", async (t) => {
   await app.accounts.add(accountBody());
   await app.quotaState.checkAccount("go-main");
 
-  const availability = await fetch(app.url("/api/availability")).then((res) => res.json());
+  const availability = await authedJson(app, "/api/availability");
   assert.equal(availability.accounts[0].available, false);
   assert.equal(availability.accounts[0].reason, "quota_low");
   assert.equal(availability.accounts[0].lowestPercentRemaining, 5);
@@ -67,7 +67,7 @@ test("availability marks old snapshots as stale", async (t) => {
   await app.quotaState.checkAccount("go-main");
   await new Promise((resolve) => setTimeout(resolve, 5));
 
-  const availability = await fetch(app.url("/api/availability")).then((res) => res.json());
+  const availability = await authedJson(app, "/api/availability");
   assert.equal(availability.accounts[0].available, false);
   assert.equal(availability.accounts[0].reason, "stale");
 });
@@ -123,6 +123,20 @@ test("API key reveal is blocked when ADMIN_TOKEN is not configured", async (t) =
   assert.equal(response.status, 401);
   const text = await response.text();
   assert.doesNotMatch(text, /sk-live_open_admin_key_12345/);
+});
+
+test("all private APIs fail closed when ADMIN_TOKEN is not configured", async (t) => {
+  const app = await createTestApp(t, { adminToken: "" });
+  for (const pathname of ["/api/accounts", "/api/quota", "/api/availability"]) {
+    const response = await fetch(app.url(pathname));
+    assert.equal(response.status, 401, pathname);
+  }
+  const login = await fetch(app.url("/api/auth"), {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ token: "anything" }),
+  });
+  assert.equal(login.status, 401);
 });
 
 test("best reveal chooses an available account with a discovered key", async (t) => {

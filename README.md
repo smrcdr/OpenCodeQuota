@@ -20,6 +20,17 @@ cp config/accounts.example.json config/accounts.json
 npm start
 ```
 
+Docker deployment keeps the service private and connects it to SmartAPIV2 over
+the shared `smartapi-edge` network:
+
+```bash
+docker network create smartapi-edge 2>/dev/null || true
+docker compose --env-file .env up -d --build
+```
+
+`ADMIN_TOKEN` is required by the compose stack. The host port is bound to
+`127.0.0.1:40129`; other containers use `http://opencode-quota:40129`.
+
 Admin UI:
 
 ```text
@@ -32,10 +43,11 @@ Health:
 curl http://127.0.0.1:40129/health
 ```
 
-Proxy-facing availability endpoint:
+Admin-authenticated availability endpoint:
 
 ```bash
-curl http://127.0.0.1:40129/api/availability
+curl -H "Authorization: Bearer $ADMIN_TOKEN" \
+  http://127.0.0.1:40129/api/availability
 ```
 
 ## API keys
