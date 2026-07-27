@@ -178,6 +178,7 @@ export async function queryOpenCodeGoQuota(workspaceId, authCookie, options = {}
       url,
       {
         method: "GET",
+        ...(options.proxyURL ? { proxy: options.proxyURL } : {}),
         headers: {
           "User-Agent": USER_AGENT,
           Accept: "text/html",
@@ -238,6 +239,7 @@ export async function queryOpenCodeGoApiKey(workspaceId, authCookie, options = {
         url,
         {
           method: "GET",
+          ...(options.proxyURL ? { proxy: options.proxyURL } : {}),
           headers: {
             "User-Agent": USER_AGENT,
             Accept: "text/html",

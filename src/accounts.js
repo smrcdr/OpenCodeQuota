@@ -12,6 +12,7 @@ export function normalizeAccount(input, existing = {}) {
   const authCookie = incomingCookie !== undefined && incomingCookie !== "" ? incomingCookie : existing.authCookie || "";
   const enabled = body.enabled === undefined ? existing.enabled !== false : Boolean(body.enabled);
   const notes = String(body.notes ?? existing.notes ?? "").trim();
+  const proxyId = String(body.proxyId ?? existing.proxyId ?? "").trim();
 
   if (!id) {
     throw new Error("Account id is required");
@@ -26,7 +27,7 @@ export function normalizeAccount(input, existing = {}) {
     throw new Error("authCookie is required");
   }
 
-  return { id, name, workspaceId, authCookie, enabled, notes };
+  return { id, name, workspaceId, authCookie, enabled, notes, proxyId };
 }
 
 export function normalizeAccountId(value) {
@@ -162,5 +163,6 @@ export function toPublicAccount(account) {
     authCookie: maskSecret(account.authCookie),
     enabled: account.enabled,
     notes: account.notes,
+    proxyId: account.proxyId || "",
   };
 }

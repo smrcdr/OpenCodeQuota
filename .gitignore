@@ -1,5 +1,6 @@
 .env
 data/
 config/accounts.json
+config/proxies.json
 node_modules/
 npm-debug.log*

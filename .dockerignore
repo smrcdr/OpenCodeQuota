@@ -1,7 +1,7 @@
 .git
 .env
 config/accounts.json
+config/proxies.json
 data
 node_modules
 npm-debug.log*
-

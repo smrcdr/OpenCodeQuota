@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { AccountStore } from "../src/accounts.js";
+import { ProxyStore } from "../src/proxies.js";
 import { createQuotaApp } from "../src/server.js";
 
 test("API protects mutation endpoints and masks secrets", async (t) => {
@@ -239,11 +240,57 @@ test("browser open endpoint returns 404 for unknown account", async (t) => {
   assert.equal(response.status, 404);
 });
 
+test("proxy API redacts credentials and blocks deletion while assigned", async (t) => {
+  const app = await createTestApp(t, {
+    testProxyConnection: async (_proxyURL, id) => ({
+      id,
+      ok: true,
+      statusCode: 200,
+      latencyMs: 3,
+    }),
+  });
+  await app.accounts.add(accountBody());
+
+  const created = await authedJson(app, "/api/proxies", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "px_test",
+      name: "Test",
+      type: "https",
+      host: "proxy.example.test",
+      port: 1234,
+      username: "proxy-user",
+      password: "proxy-password",
+    }),
+  });
+  assert.equal(created.proxy.endpoint, "proxy.example.test:1234");
+  assert.equal(created.proxy.authConfigured, true);
+  assert.doesNotMatch(JSON.stringify(created), /proxy-user|proxy-password/);
+
+  await authedJson(app, "/api/accounts/go-main/proxy", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ proxyId: "px_test" }),
+  });
+  const accounts = await authedJson(app, "/api/accounts");
+  assert.equal(accounts.accounts[0].proxyId, "px_test");
+
+  const deletion = await authedFetch(app, "/api/proxies/px_test", { method: "DELETE" });
+  assert.equal(deletion.status, 409);
+  const tested = await authedJson(app, "/api/proxies/px_test/test", { method: "POST" });
+  assert.equal(tested.ok, true);
+});
+
 async function createTestApp(t, options = {}) {
   const dir = await mkdtemp(path.join(tmpdir(), "opencode-quota-test-"));
   const accounts = new AccountStore(path.join(dir, "accounts.json"));
+  const proxies = new ProxyStore(path.join(dir, "proxies.json"), {
+    testConnection: options.testProxyConnection,
+  });
   const app = await createQuotaApp({
     accounts,
+    proxies,
     adminToken: options.adminToken === undefined ? "secret" : options.adminToken,
     scrapeAccount: options.scrapeAccount,
     scrapeApiKey: options.scrapeApiKey,

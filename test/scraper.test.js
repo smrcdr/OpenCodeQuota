@@ -88,6 +88,21 @@ test("queryOpenCodeGoQuota reports login redirects clearly", async () => {
   assert.equal(result.error, "OpenCode Go dashboard requires login; check workspaceId and authCookie");
 });
 
+test("queryOpenCodeGoQuota forwards the account proxy to Bun fetch", async () => {
+  let requestOptions = null;
+  const result = await queryOpenCodeGoQuota("workspace", "cookie", {
+    proxyURL: "http://user:pass@proxy.example.test:1234",
+    fetchImpl: async (_url, options) => {
+      requestOptions = options;
+      return new Response("rollingUsage:$R[1]={usagePercent:10,resetInSec:60}", {
+        status: 200,
+      });
+    },
+  });
+  assert.equal(result.success, true);
+  assert.equal(requestOptions.proxy, "http://user:pass@proxy.example.test:1234");
+});
+
 test("extracts API key from SSR or hydration-like content", () => {
   const html = `apiKey:$R[3]={value:"sk-live_hydration_key_12345"}`;
   assert.equal(extractOpenCodeGoApiKey(html), "sk-live_hydration_key_12345");

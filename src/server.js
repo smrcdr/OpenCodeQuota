@@ -9,6 +9,8 @@ import { buildCookie, parseCookies, readJsonRequest, sendJson, sendNoContent, se
 import { loginWithGoogle, loginAllGoogle, GoogleLoginError } from "./google-login.js";
 import { QuotaScheduler } from "./scheduler.js";
 import { QuotaState } from "./quota-state.js";
+import { ProxyStore, ProxyStoreError, toPublicProxy } from "./proxies.js";
+import { queryOpenCodeGoApiKey, queryOpenCodeGoQuota } from "./scraper.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, "..");
@@ -26,6 +28,9 @@ const DEFAULT_OPTIONS = {
   accountsPath: process.env.ACCOUNTS_PATH
     ? path.resolve(rootDir, process.env.ACCOUNTS_PATH)
     : path.join(rootDir, "config", "accounts.json"),
+  proxiesPath: process.env.PROXIES_PATH
+    ? path.resolve(rootDir, process.env.PROXIES_PATH)
+    : path.join(rootDir, "config", "proxies.json"),
   scrapeIntervalMs: readIntegerEnv("SCRAPE_INTERVAL_SECONDS", 60, { min: 5 }) * 1000,
   scrapeTimeoutMs: readIntegerEnv("SCRAPE_TIMEOUT_MS", 10_000, { min: 1000 }),
   staleAfterMs: readIntegerEnv("STALE_AFTER_SECONDS", 180, { min: 1 }) * 1000,
@@ -36,11 +41,29 @@ export async function createQuotaApp(options = {}) {
   const settings = { ...DEFAULT_OPTIONS, ...options };
   const accounts = options.accounts || new AccountStore(settings.accountsPath);
   await accounts.load();
+  const proxies = options.proxies || new ProxyStore(settings.proxiesPath, {
+    testConnection: options.testProxyConnection,
+  });
+  await proxies.load();
 
   const quotaState = options.quotaState || new QuotaState({
     accounts,
-    scrapeAccount: options.scrapeAccount,
-    scrapeApiKey: options.scrapeApiKey,
+    scrapeAccount: options.scrapeAccount || ((account) => queryOpenCodeGoQuota(
+      account.workspaceId,
+      account.authCookie,
+      {
+        requestTimeoutMs: settings.scrapeTimeoutMs,
+        proxyURL: proxies.urlFor(account.proxyId),
+      },
+    )),
+    scrapeApiKey: options.scrapeApiKey || ((account) => queryOpenCodeGoApiKey(
+      account.workspaceId,
+      account.authCookie,
+      {
+        requestTimeoutMs: settings.scrapeTimeoutMs,
+        proxyURL: proxies.urlFor(account.proxyId),
+      },
+    )),
     staleAfterMs: settings.staleAfterMs,
     minPercentRemaining: settings.minPercentRemaining,
   });
@@ -56,7 +79,7 @@ export async function createQuotaApp(options = {}) {
 
   const server = http.createServer(async (req, res) => {
     try {
-      await handleRequest(req, res, { settings, accounts, quotaState, scheduler, browserSessions });
+      await handleRequest(req, res, { settings, accounts, proxies, quotaState, scheduler, browserSessions });
     } catch (error) {
       console.error(error);
       sendJson(res, 500, {
@@ -68,7 +91,7 @@ export async function createQuotaApp(options = {}) {
     }
   });
 
-  return { server, accounts, quotaState, scheduler, browserSessions, settings };
+  return { server, accounts, proxies, quotaState, scheduler, browserSessions, settings };
 }
 
 async function handleRequest(req, res, ctx) {
@@ -121,6 +144,56 @@ async function handleApi(req, res, url, ctx) {
     return sendJson(res, 200, { accounts: listPublicAccounts(ctx) });
   }
 
+  if (req.method === "GET" && url.pathname === "/api/proxies") {
+    return sendJson(res, 200, { proxies: ctx.proxies.listPublic(ctx.accounts.list()) });
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/proxies") {
+    try {
+      const proxy = await ctx.proxies.add(await readJsonRequest(req));
+      return sendJson(res, 201, { proxy: toPublicProxy(proxy, ctx.accounts.list()) });
+    } catch (error) {
+      return sendProxyError(res, error);
+    }
+  }
+
+  const proxyMatch = url.pathname.match(/^\/api\/proxies\/([^/]+)$/);
+  if (proxyMatch && req.method === "PUT") {
+    try {
+      const proxy = await ctx.proxies.update(
+        decodeURIComponent(proxyMatch[1]),
+        await readJsonRequest(req),
+      );
+      return proxy
+        ? sendJson(res, 200, { proxy: toPublicProxy(proxy, ctx.accounts.list()) })
+        : sendJson(res, 404, { error: { message: "Proxy not found", type: "not_found" } });
+    } catch (error) {
+      return sendProxyError(res, error);
+    }
+  }
+
+  if (proxyMatch && req.method === "DELETE") {
+    try {
+      const removed = await ctx.proxies.remove(
+        decodeURIComponent(proxyMatch[1]),
+        ctx.accounts.list(),
+      );
+      return removed
+        ? sendNoContent(res)
+        : sendJson(res, 404, { error: { message: "Proxy not found", type: "not_found" } });
+    } catch (error) {
+      return sendProxyError(res, error);
+    }
+  }
+
+  const proxyTestMatch = url.pathname.match(/^\/api\/proxies\/([^/]+)\/test$/);
+  if (proxyTestMatch && req.method === "POST") {
+    const result = await ctx.proxies.test(decodeURIComponent(proxyTestMatch[1]));
+    return result
+      ? sendJson(res, result.ok ? 200 : 502, result)
+      : sendJson(res, 404, { error: { message: "Proxy not found", type: "not_found" } });
+  }
+
   if (req.method === "POST" && url.pathname === "/api/accounts") {
     const body = await readJsonRequest(req);
     const account = await ctx.accounts.add(body);
@@ -146,6 +219,22 @@ async function handleApi(req, res, url, ctx) {
     return removed
       ? sendNoContent(res)
       : sendJson(res, 404, { error: { message: "Account not found", type: "not_found" } });
+  }
+
+  const accountProxyMatch = url.pathname.match(/^\/api\/accounts\/([^/]+)\/proxy$/);
+  if (accountProxyMatch && req.method === "PUT") {
+    const id = decodeURIComponent(accountProxyMatch[1]);
+    const body = await readJsonRequest(req);
+    const proxyId = String(body?.proxyId || "").trim();
+    if (proxyId && !ctx.proxies.find(proxyId)) {
+      return sendJson(res, 400, { error: { message: "Proxy not found", type: "invalid_request" } });
+    }
+    const account = await ctx.accounts.update(id, { proxyId });
+    if (!account) {
+      return sendJson(res, 404, { error: { message: "Account not found", type: "not_found" } });
+    }
+    ctx.quotaState.syncAccounts();
+    return sendJson(res, 200, { account: toPublicAccount(account) });
   }
 
   if (req.method === "POST" && url.pathname === "/api/google-login") {
@@ -444,6 +533,15 @@ function isValidAdminToken(token, adminToken) {
 
 function isRevealAuthorized(req, adminToken) {
   return Boolean(adminToken) && isAdminAuthorized(req, adminToken);
+}
+
+function sendProxyError(res, error) {
+  if (error instanceof ProxyStoreError) {
+    return sendJson(res, error.code === "proxy_assigned" || error.code === "proxy_exists" ? 409 : 400, {
+      error: { message: error.message, type: error.code },
+    });
+  }
+  throw error;
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
